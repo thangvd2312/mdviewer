@@ -1,0 +1,13 @@
+{
+  "name": "mdviewer",
+  "private": true,
+  "description": "Read Markdown beautifully — NestJS API + React app",
+  "scripts": {
+    "install:all": "npm ci --prefix backend --no-audit --no-fund && npm ci --prefix frontend --no-audit --no-fund",
+    "build": "npm run build --prefix frontend && npm run build --prefix backend",
+    "check": "npm run typecheck --prefix backend && npm run lint --prefix frontend && npm run build"
+  },
+  "engines": {
+    "node": ">=22.12"
+  }
+}
