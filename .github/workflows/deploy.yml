@@ -1,0 +1,72 @@
+# CI on every push/PR (GitHub-hosted). Deploy on push to main via the self-hosted runner on the server.
+# The server is only reachable over Tailscale, so the runner installed on it pulls jobs from GitHub
+# instead of GitHub connecting in. The deploy job never runs for pull requests, so code from forks
+# can't execute on the server.
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - run: npm run install:all
+      - name: Typecheck, lint & build
+        run: npm run check
+
+  deploy:
+    needs: check
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, mdviewer]
+    timeout-minutes: 20
+    concurrency:
+      group: deploy-mdviewer
+      cancel-in-progress: false
+    env:
+      APP_DIR: /home/thangvv/apps/mdviewer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync code into the app directory (keeps .env, node_modules)
+        run: |
+          mkdir -p "$APP_DIR"
+          rsync -a --delete \
+            --exclude .git --exclude node_modules --exclude dist --exclude .env \
+            ./ "$APP_DIR/"
+
+      - name: Install & build
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          npm run install:all
+          npm run build
+
+      - name: Reload app (pm2) — migrations run on startup
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          pm2 startOrReload ecosystem.config.cjs --update-env
+          pm2 save
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4100/api/health; then echo; echo "✅ deployed $GITHUB_SHA"; exit 0; fi
+            sleep 2
+          done
+          echo "❌ app did not become healthy"; pm2 logs mdviewer --lines 80 --nostream; exit 1

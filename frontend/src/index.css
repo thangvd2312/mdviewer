@@ -1,0 +1,364 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --surface: #ffffff;
+  --sidebar: #f9f9f9;
+  --hover: #efeff0;
+  --raised: #f7f7f8;
+  --line: #e6e6e9;
+  --ink: #1b1b1f;
+  --ink-muted: #5e5e66;
+  --ink-faint: #9b9ba3;
+  --accent: #1f5fd6;
+  --danger: #d03b3b;
+  color-scheme: light;
+}
+
+.dark {
+  --surface: #17171a;
+  --sidebar: #1d1d21;
+  --hover: #2a2a2f;
+  --raised: #1f1f23;
+  --line: #2e2e34;
+  --ink: #ececef;
+  --ink-muted: #a4a4ad;
+  --ink-faint: #6c6c75;
+  --accent: #79a8ff;
+  --danger: #ff7272;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-surface: var(--surface);
+  --color-sidebar: var(--sidebar);
+  --color-hover: var(--hover);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* Thin, unobtrusive scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--ink) 18%, transparent) transparent;
+}
+
+/* ───────────────────────── Markdown document ───────────────────────── */
+
+.markdown {
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--ink);
+  overflow-wrap: break-word;
+}
+
+.markdown > :first-child {
+  margin-top: 0 !important;
+}
+
+.markdown :is(p, ul, ol, blockquote, table, pre, details, .code-card, .mermaid-card, .table-wrap) {
+  margin: 0 0 1.05em;
+}
+
+.markdown :is(h1, h2, h3, h4, h5, h6) {
+  position: relative;
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  scroll-margin-top: 24px;
+}
+
+.markdown h1 {
+  font-size: 1.9em;
+  letter-spacing: -0.022em;
+  margin: 0 0 0.7em;
+}
+.markdown h2 {
+  font-size: 1.4em;
+  margin: 1.9em 0 0.6em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--line);
+}
+.markdown h3 {
+  font-size: 1.15em;
+  margin: 1.6em 0 0.5em;
+}
+.markdown h4 {
+  font-size: 1em;
+  margin: 1.4em 0 0.4em;
+}
+.markdown :is(h5, h6) {
+  font-size: 0.9em;
+  margin: 1.2em 0 0.4em;
+  color: var(--ink-muted);
+}
+
+.markdown .heading-anchor {
+  position: absolute;
+  left: -1.1em;
+  padding-right: 0.3em;
+  color: var(--ink-faint);
+  font-weight: 400;
+  opacity: 0;
+  text-decoration: none;
+  transition: opacity 0.15s;
+}
+.markdown :is(h1, h2, h3, h4):hover .heading-anchor {
+  opacity: 1;
+}
+
+.markdown a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.markdown a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.markdown strong {
+  font-weight: 650;
+}
+
+.markdown :is(ul, ol) {
+  padding-left: 1.5em;
+}
+.markdown ul {
+  list-style: disc;
+}
+.markdown ol {
+  list-style: decimal;
+}
+.markdown li + li,
+.markdown li > :is(ul, ol) {
+  margin-top: 0.3em;
+}
+.markdown li > :is(ul, ol) {
+  margin-bottom: 0;
+}
+.markdown li::marker {
+  color: var(--ink-faint);
+}
+.markdown li > p {
+  margin: 0.3em 0;
+}
+
+/* GFM task lists */
+.markdown .contains-task-list {
+  list-style: none;
+  padding-left: 0.2em;
+}
+.markdown .task-list-item input[type='checkbox'] {
+  margin: 0 0.55em 0.2em 0;
+  vertical-align: middle;
+  accent-color: var(--accent);
+}
+
+.markdown blockquote {
+  padding: 0.15em 1em;
+  border-left: 3px solid var(--line);
+  color: var(--ink-muted);
+}
+.markdown blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 2em 0;
+}
+
+.markdown img {
+  max-width: 100%;
+  border-radius: 12px;
+}
+
+/* Inline code — small rounded pill, like the reference design */
+.markdown :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  padding: 0.12em 0.4em;
+  border-radius: 6px;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  white-space: break-spaces;
+}
+
+.markdown kbd {
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  padding: 0.1em 0.45em;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--raised);
+}
+
+.markdown .table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.93em;
+  margin: 0;
+}
+.markdown th {
+  text-align: left;
+  font-weight: 600;
+  background: var(--raised);
+}
+.markdown :is(th, td) {
+  padding: 0.55em 0.9em;
+  border-bottom: 1px solid var(--line);
+}
+.markdown :is(th, td) + :is(th, td) {
+  border-left: 1px solid var(--line);
+}
+.markdown tr:last-child td {
+  border-bottom: 0;
+}
+
+.markdown details {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.6em 1em;
+}
+.markdown summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.markdown .footnotes {
+  margin-top: 2.5em;
+  font-size: 0.88em;
+  color: var(--ink-muted);
+}
+
+/* Fenced code blocks are rendered as cards (see CodeBlock.tsx) */
+.markdown pre {
+  margin: 0;
+  padding: 0.1em 1.1em 1.1em;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 12.75px;
+  line-height: 1.7;
+}
+.markdown pre code {
+  font-family: inherit;
+}
+
+/* ───────────────────────── Syntax highlighting ───────────────────────── */
+
+.hljs-comment,
+.hljs-quote {
+  color: #8a8a93;
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-meta .hljs-keyword,
+.hljs-doctag {
+  color: #c4314b;
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-meta .hljs-string {
+  color: #1f7a3f;
+}
+.hljs-number,
+.hljs-literal,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-attr,
+.hljs-symbol,
+.hljs-bullet {
+  color: #0b62c4;
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-section {
+  color: #7a3fc4;
+}
+.hljs-type,
+.hljs-built_in,
+.hljs-title.class_,
+.hljs-selector-class,
+.hljs-selector-id {
+  color: #a6560c;
+}
+.hljs-name,
+.hljs-tag,
+.hljs-attribute {
+  color: #1a7f8a;
+}
+.hljs-meta {
+  color: #6c6c75;
+}
+.hljs-deletion {
+  color: #c4314b;
+  background: #fde8eb;
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 600;
+}
+
+.dark .hljs-comment,
+.dark .hljs-quote {
+  color: #6f7380;
+}
+.dark :is(.hljs-keyword, .hljs-selector-tag, .hljs-doctag) {
+  color: #ff7b8f;
+}
+.dark :is(.hljs-string, .hljs-regexp, .hljs-addition) {
+  color: #8bd49c;
+}
+.dark :is(.hljs-number, .hljs-literal, .hljs-variable, .hljs-template-variable, .hljs-attr, .hljs-symbol, .hljs-bullet) {
+  color: #79b8ff;
+}
+.dark :is(.hljs-title, .hljs-section) {
+  color: #c9a0ff;
+}
+.dark :is(.hljs-type, .hljs-built_in, .hljs-selector-class, .hljs-selector-id) {
+  color: #ffb070;
+}
+.dark :is(.hljs-name, .hljs-tag, .hljs-attribute) {
+  color: #6fd3dd;
+}
+.dark .hljs-deletion {
+  color: #ff9aa8;
+  background: #3a1f24;
+}
