@@ -57,18 +57,18 @@ function useDebounced<T>(value: T, ms: number) {
 /** Instant, generic suggestions shown while (or instead of) the tailored ones load. */
 function starterQuestions(page: PageInfo, quote: string | null): string[] {
   const { context } = page
-  if (quote) return ['Explain this passage simply', 'Give me a concrete example of this', 'Why does this matter here?']
+  if (quote) return ['Giải thích đoạn này dễ hiểu hơn', 'Cho mình một ví dụ cụ thể', 'Vì sao đoạn này quan trọng ở đây?']
   if (context.page === 'doc' && context.sectionTitle)
     return [
-      `Summarize “${context.sectionTitle}”`,
-      'What are the key points of this section?',
-      'Quiz me on this section',
+      `Tóm tắt mục “${context.sectionTitle}”`,
+      'Các ý chính của mục này là gì?',
+      'Đố mình vài câu về mục này',
     ]
   if (context.page === 'doc')
-    return ['Summarize this document', 'What are the key takeaways?', 'Quiz me on this document']
+    return ['Tóm tắt tài liệu này', 'Những điểm cần nhớ là gì?', 'Đố mình vài câu về tài liệu này']
   if (context.page === 'project')
-    return ['What is this project about?', 'Which document should I read first?', 'Summarize the project']
-  return ['What have I been reading lately?', 'Which of my documents should I review?']
+    return ['Project này nói về gì?', 'Nên đọc tài liệu nào trước?', 'Tóm tắt project này']
+  return ['Gần đây mình đã đọc những gì?', 'Mình nên ôn lại tài liệu nào?']
 }
 
 function AssistantPanel({ side }: { side: Side }) {
