@@ -57,6 +57,25 @@ jobs:
           npm run install:all
           npm run build
 
+      # The repo is public, so the assistant's API key lives in the repo secret ASSISTANT_API_KEY
+      # and is written into the server's .env here. Without the secret, .env is left untouched.
+      - name: Assistant config from repo secrets
+        env:
+          ASSISTANT_API_KEY: ${{ secrets.ASSISTANT_API_KEY }}
+          ASSISTANT_BASE_URL: ${{ vars.ASSISTANT_BASE_URL || 'https://9router.tidesquare.vn/v1' }}
+        run: |
+          if [ -z "$ASSISTANT_API_KEY" ]; then echo "ASSISTANT_API_KEY secret not set; leaving .env as is"; exit 0; fi
+          f="$APP_DIR/.env"
+          touch "$f"
+          upsert() {
+            grep -v "^$1=" "$f" > "$f.tmp" || true
+            printf '%s=%s\n' "$1" "$2" >> "$f.tmp"
+            cat "$f.tmp" > "$f" && rm "$f.tmp"
+          }
+          upsert ASSISTANT_BASE_URL "$ASSISTANT_BASE_URL"
+          upsert ASSISTANT_API_KEY "$ASSISTANT_API_KEY"
+          echo "assistant config written to .env"
+
       - name: Reload app (pm2) — migrations run on startup
         working-directory: ${{ env.APP_DIR }}
         run: |

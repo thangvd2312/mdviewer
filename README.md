@@ -46,6 +46,10 @@ Mở http://localhost:5173, bấm **Continue with GitHub**, rồi bấm **Open s
 
 Khi deploy, tạo thêm một OAuth App khác với domain thật, rồi cập nhật `FRONTEND_URL` và `GITHUB_CALLBACK_URL`.
 
+### Trợ lý AI
+
+Trợ lý gọi bất kỳ endpoint nào tương thích OpenAI Chat Completions. Điền vào `backend/.env`: `ASSISTANT_BASE_URL` (vd. `https://9router.tidesquare.vn/v1`), `ASSISTANT_API_KEY`, `ASSISTANT_MODEL` (mặc định `cx/gpt-6.1-sol`) và `ASSISTANT_EFFORT` (reasoning effort cho câu trả lời: `low`/`medium`/`high`, mặc định `high`; gợi ý câu hỏi luôn dùng `low` cho nhanh), rồi khởi động lại backend. Để trống `ASSISTANT_API_KEY` thì trợ lý bị tắt (nút vẫn hiện nhưng báo chưa cấu hình). Mỗi người dùng tối đa 40 câu hỏi / 10 phút.
+
 > `DB_SYNC=true` cho TypeORM tự tạo bảng từ entity, chỉ dùng cho môi trường dev. Khi lên production nên tắt và dùng migrations.
 
 ## Tính năng
@@ -63,6 +67,8 @@ Khi deploy, tạo thêm một OAuth App khác với domain thật, rồi cập n
 - Tiêu đề tự lấy từ heading đầu tiên nếu không nhập.
 - **Tìm kiếm** ⌘K theo tiêu đề và nội dung. **Recents** sắp theo lần mở gần nhất.
 - Copy Markdown, tải file `.md`, xoá tài liệu hoặc project (xoá project sẽ xoá kèm toàn bộ tài liệu bên trong).
+- **Sticky notes**: bôi đen một đoạn bất kỳ trong tài liệu → chọn màu trên thanh công cụ để ghim note. 6 loại, mỗi loại một màu giấy: Note (vàng), Important (đỏ), Idea (xanh lá), Question (tím), To-do (cam), Definition (xanh dương). Đoạn được ghim sẽ được tô màu, có marker ở lề phải; bấm vào đoạn hoặc marker để mở/sửa note, đổi loại, xoá. Danh sách note (lọc theo loại) nằm ở cột phải hoặc nút *Notes* trên thanh trên. Note gắn theo nội dung text nên vẫn đúng chỗ khi sửa tài liệu; nếu đoạn text bị xoá, note vẫn còn trong danh sách với nhãn "text no longer in document".
+- **Trợ lý AI**: nút nổi kiểu AssistiveTouch, kéo thả được và tự bám mép màn hình. Trợ lý biết bạn đang ở trang nào, đang đọc mục nào và các sticky note của tài liệu, nên gợi ý câu hỏi theo đúng mục đang đọc. Bôi đen một đoạn rồi bấm *Ask* (hoặc ✨ trong note) để hỏi riêng về đoạn đó. Câu trả lời stream trực tiếp; mỗi tài liệu / project có cuộc trò chuyện riêng.
 - Light / dark / theo hệ thống. Có giao diện cho mobile, sidebar thu gọn được.
 
 ### Phím tắt
@@ -72,7 +78,9 @@ Khi deploy, tạo thêm một OAuth App khác với domain thật, rồi cập n
 | ⌘K / Ctrl+K | Tìm kiếm |
 | E | Sửa tài liệu đang xem |
 | ⌘S / Ctrl+S | Lưu và tiếp tục sửa |
-| ⌘↵ | Lưu nội dung đã paste ở trang chủ |
+| ⌘↵ | Lưu nội dung đã paste ở trang chủ / đóng sticky note |
+| N | Ghim note cho đoạn đang bôi đen |
+| ⌘J / Ctrl+J | Mở / đóng trợ lý |
 
 ## API
 
@@ -89,6 +97,11 @@ Tất cả route (trừ `auth/github*`) cần header `Authorization: Bearer <tok
 | POST | `/api/docs` | `{ content, title?, projectId? }`, title để trống thì lấy từ heading |
 | GET | `/api/docs/:id` | Trả về đầy đủ và cập nhật `lastOpenedAt` |
 | PATCH / DELETE | `/api/docs/:id` | `projectId: null` để chuyển thành note |
+| GET / POST | `/api/docs/:id/annotations` | Sticky notes của doc. POST: `{ quote, prefix?, suffix?, position?, kind?, body? }` |
+| PATCH / DELETE | `/api/annotations/:id` | PATCH: `{ kind?, body? }` |
+| GET | `/api/assistant/status` | `{ enabled, model }` |
+| POST | `/api/assistant/suggest` | `{ context, selection? }` → `{ questions }` |
+| POST | `/api/assistant/chat` | `{ messages, context }`, trả về Server-Sent Events (`text` / `reset` / `done` / `error`) |
 
 Nội dung tối đa khoảng 2 triệu ký tự (body JSON giới hạn 5 MB).
 
@@ -104,6 +117,7 @@ Cloudflare (HTTPS) ── cloudflared tunnel ──► 127.0.0.1:4100  pm2 "mdvi
 
 - **CI/CD** (`.github/workflows/deploy.yml`): mỗi lần push hoặc mở PR sẽ chạy typecheck, lint và build trên runner của GitHub. Riêng push lên `main` thì sẽ deploy thêm qua self-hosted runner trên server (label `mdviewer`): rsync code vào `~/apps/mdviewer`, `npm run install:all`, `npm run build`, `pm2 startOrReload`, rồi gọi `/api/health` để kiểm tra.
 - **Cấu hình server**: file `~/apps/mdviewer/.env` (xem mẫu ở `.env.production.example`). File này không được commit và rsync cũng không ghi đè lên nó.
+- **Key của trợ lý AI**: lưu trong GitHub secret `ASSISTANT_API_KEY` (repo public nên không để trong code). Mỗi lần deploy, workflow ghi `ASSISTANT_API_KEY` và `ASSISTANT_BASE_URL` (biến `vars.ASSISTANT_BASE_URL`, mặc định router 9router) vào `.env` trên server. Đổi key: `gh secret set ASSISTANT_API_KEY` rồi chạy lại workflow.
 - **Database**: migration (`backend/src/migrations`) tự chạy mỗi khi app khởi động (`DB_MIGRATIONS_RUN=true`). Khi đổi entity thì tạo migration mới:
   ```bash
   cd backend && DB_NAME=<db trống hoặc khớp schema hiện tại> npm run migration:generate -- src/migrations/<TenMigration>

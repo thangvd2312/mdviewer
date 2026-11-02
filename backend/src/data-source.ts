@@ -2,6 +2,7 @@
 //   npm run migration:generate -- src/migrations/<Name>   (against a database that matches the current schema)
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
+import { Annotation } from './annotations/annotation.entity';
 import { Doc } from './docs/doc.entity';
 import { Project } from './projects/project.entity';
 import { User } from './users/user.entity';
@@ -14,6 +15,6 @@ export default new DataSource({
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   charset: 'utf8mb4_unicode_ci',
-  entities: [User, Project, Doc],
+  entities: [User, Project, Doc, Annotation],
   migrations: [__dirname + '/migrations/*.js'],
 });

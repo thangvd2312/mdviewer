@@ -7,6 +7,7 @@ import { DocRow } from '../components/DocRow'
 import { ProjectDialog } from '../components/ProjectDialog'
 import { ProjectSelect } from '../components/ProjectSelect'
 import { Button } from '../components/ui'
+import { usePageAssistant } from '../lib/assistant'
 import { useAuth } from '../lib/auth'
 import { greeting } from '../lib/format'
 import { useDocs, useProjects, useSaveDoc } from '../lib/queries'
@@ -25,6 +26,7 @@ export function HomePage() {
   const [projectId, setProjectId] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
   const [creatingProject, setCreatingProject] = useState(false)
+  usePageAssistant({ context: { page: 'home' }, title: 'Home' })
 
   const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
   const docCount = useMemo(() => {

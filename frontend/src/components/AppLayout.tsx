@@ -2,7 +2,9 @@ import clsx from 'clsx'
 import { ChevronRight, PanelLeft } from 'lucide-react'
 import { Fragment, type ReactNode } from 'react'
 import { Link, Outlet } from 'react-router'
+import { AssistantProvider } from '../lib/assistant'
 import { useUI } from '../lib/ui'
+import { Assistant } from './assistant/AssistantPanel'
 import { SearchDialog } from './SearchDialog'
 import { Sidebar } from './Sidebar'
 import { IconButton } from './ui'
@@ -10,6 +12,7 @@ import { IconButton } from './ui'
 export function AppLayout() {
   const { sidebarOpen, setSidebarOpen } = useUI()
   return (
+    <AssistantProvider>
     <div className="flex h-dvh overflow-hidden">
       {sidebarOpen && (
         <div className="fixed inset-0 z-20 bg-black/30 md:hidden" onClick={() => setSidebarOpen(false)} aria-hidden />
@@ -26,7 +29,9 @@ export function AppLayout() {
         <Outlet />
       </main>
       <SearchDialog />
+      <Assistant />
     </div>
+    </AssistantProvider>
   )
 }
 

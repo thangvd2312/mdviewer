@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, type DocInput, type DocSummary, type Project, type ProjectInput } from './api'
+import { api, type Annotation, type AnnotationInput, type DocInput, type DocSummary, type Project, type ProjectInput } from './api'
 
 export const keys = {
   projects: ['projects'] as const,
   docs: ['docs'] as const,
   doc: (id: string) => ['doc', id] as const,
   search: (q: string) => ['search', q] as const,
+  annotations: (docId: string) => ['annotations', docId] as const,
+  assistantStatus: ['assistant', 'status'] as const,
 }
 
 export const useProjects = () => useQuery({ queryKey: keys.projects, queryFn: api.projects.list })
@@ -87,3 +89,38 @@ export function useDeleteProject() {
     },
   })
 }
+
+export const useAnnotations = (docId: string | undefined) =>
+  useQuery({ queryKey: keys.annotations(docId ?? ''), enabled: Boolean(docId), queryFn: () => api.annotations.list(docId!) })
+
+/** Create / update / delete sticky notes of one document, keeping the cached list in sync. */
+export function useAnnotationMutations(docId: string) {
+  const queryClient = useQueryClient()
+  const key = keys.annotations(docId)
+  const put = (a: Annotation) =>
+    queryClient.setQueryData<Annotation[]>(key, (list = []) =>
+      [...list.filter((x) => x.id !== a.id), a].sort((x, y) => x.position - y.position),
+    )
+
+  const create = useMutation({
+    mutationFn: (input: AnnotationInput) => api.annotations.create(docId, input),
+    onSuccess: put,
+  })
+  const update = useMutation({
+    mutationFn: ({ id, ...input }: Partial<Pick<Annotation, 'kind' | 'body'>> & { id: string }) =>
+      api.annotations.update(id, input),
+    // Optimistic: the note UI edits in place.
+    onMutate: ({ id, ...input }) =>
+      queryClient.setQueryData<Annotation[]>(key, (list) => list?.map((a) => (a.id === id ? { ...a, ...input } : a))),
+    onSuccess: put,
+  })
+  const remove = useMutation({
+    mutationFn: (id: string) => api.annotations.remove(id),
+    onMutate: (id) => queryClient.setQueryData<Annotation[]>(key, (list) => list?.filter((a) => a.id !== id)),
+    onError: () => queryClient.invalidateQueries({ queryKey: key }),
+  })
+  return { create, update, remove }
+}
+
+export const useAssistantStatus = () =>
+  useQuery({ queryKey: keys.assistantStatus, queryFn: api.assistant.status, staleTime: Infinity })

@@ -1,15 +1,17 @@
 import clsx from 'clsx'
-import { ClipboardCopy, Download, Ellipsis, FolderInput, PanelRight, Pencil, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { ClipboardCopy, Download, Ellipsis, FolderInput, PanelRight, Pencil, StickyNote, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { TopBar } from '../components/AppLayout'
-import { MarkdownView } from '../components/MarkdownView'
 import { MoveDialog } from '../components/MoveDialog'
-import { buttonClass, ConfirmDialog, IconButton, Menu, MenuItem, MenuSeparator } from '../components/ui'
+import { AnnotatedContent } from '../components/notes/AnnotatedContent'
+import { NotesList } from '../components/notes/NotesList'
+import { buttonClass, ConfirmDialog, IconButton, Menu, MenuItem, MenuSeparator, Modal } from '../components/ui'
 import type { Doc, Project } from '../lib/api'
 import { timeAgo } from '../lib/format'
 import { downloadMarkdown, readingStats, startsWithH1 } from '../lib/markdown'
-import { useDeleteDoc, useDoc, useProjects, useSaveDoc } from '../lib/queries'
+import { useAssistant, usePageAssistant } from '../lib/assistant'
+import { useAnnotationMutations, useAnnotations, useDeleteDoc, useDoc, useProjects, useSaveDoc } from '../lib/queries'
 import { useStoredState } from '../lib/storage'
 import { useUI } from '../lib/ui'
 import { NotFound, PageLoading } from './NotFound'
@@ -31,6 +33,42 @@ export function DocPage() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const articleRef = useRef<HTMLElement>(null)
+
+  // Sticky notes
+  const { data: annotations = [] } = useAnnotations(id)
+  const { remove: removeNote } = useAnnotationMutations(id ?? '')
+  const [openNoteId, setOpenNoteId] = useState<string | null>(null)
+  const [jump, setJump] = useState<{ id: string; n: number } | null>(null)
+  const [orphans, setOrphans] = useState<Set<string>>(() => new Set())
+  const [notesOpen, setNotesOpen] = useState(false)
+  useEffect(() => setOpenNoteId(null), [id])
+  const openNote = useCallback((noteId: string) => {
+    setNotesOpen(false)
+    setJump({ id: noteId, n: Date.now() })
+  }, [])
+  const deleteNote = useCallback(
+    (noteId: string) => {
+      removeNote.mutate(noteId)
+      toast('Note deleted')
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [removeNote.mutate, toast],
+  )
+
+  // Tell the assistant which document and section are on screen.
+  const headings = useHeadings(articleRef, doc?.content)
+  const activeId = useActiveHeading(headings, scrollRef)
+  const active = headings.find((h) => h.id === activeId)
+  usePageAssistant(
+    doc
+      ? {
+          context: { page: 'doc', docId: doc.id, ...(active && active.level > 1 && { sectionTitle: active.text }) },
+          title: doc.title,
+        }
+      : null,
+  )
+  const { ask } = useAssistant()
+  const askAbout = useCallback((quote: string) => ask({ quote }), [ask])
 
   const project = projects.find((p) => p.id === doc?.projectId)
 
@@ -81,6 +119,15 @@ export function DocPage() {
         ]}
         actions={
           <>
+            <button
+              type="button"
+              onClick={() => setNotesOpen(true)}
+              className={clsx(buttonClass('ghost'), outlineOpen && 'xl:hidden')}
+              title="Sticky notes"
+            >
+              <StickyNote className="size-3.5" />
+              {annotations.length > 0 ? annotations.length : <span className="max-sm:hidden">Notes</span>}
+            </button>
             <Link to={`/d/${doc.id}/edit`} className={buttonClass('ghost')} title="Edit (E)">
               <Pencil className="size-3.5" /> Edit
             </Link>
@@ -126,18 +173,42 @@ export function DocPage() {
                 <h1>{doc.title}</h1>
               </div>
             )}
-            <MarkdownView content={doc.content} />
+            <AnnotatedContent
+              docId={doc.id}
+              content={doc.content}
+              annotations={annotations}
+              openId={openNoteId}
+              setOpenId={setOpenNoteId}
+              jump={jump}
+              scrollRef={scrollRef}
+              onOrphans={setOrphans}
+              onAsk={askAbout}
+            />
           </article>
           {outlineOpen && (
             <aside className="hidden w-60 shrink-0 xl:block">
-              <div className="sticky top-2">
-                <OutlineCard doc={doc} project={project} articleRef={articleRef} scrollRef={scrollRef} />
+              <div className="sticky top-2 space-y-3">
+                <OutlineCard doc={doc} project={project} headings={headings} active={activeId} />
+                <div className={cardClass}>
+                  <div className="flex items-center px-2 pb-2 text-[12.5px] font-medium text-ink-muted">
+                    Sticky notes
+                    {annotations.length > 0 && <span className="ml-auto font-normal text-ink-faint">{annotations.length}</span>}
+                  </div>
+                  <div className="max-h-[32vh] overflow-y-auto">
+                    <NotesList annotations={annotations} orphanIds={orphans} onOpen={openNote} onDelete={deleteNote} />
+                  </div>
+                </div>
               </div>
             </aside>
           )}
         </div>
       </div>
 
+      <Modal open={notesOpen} onClose={() => setNotesOpen(false)} title="Sticky notes">
+        <div className="max-h-[60vh] overflow-y-auto px-4 pt-3 pb-4">
+          <NotesList annotations={annotations} orphanIds={orphans} onOpen={openNote} onDelete={deleteNote} />
+        </div>
+      </Modal>
       <MoveDialog open={moving} current={doc.projectId} onClose={() => setMoving(false)} onMove={move} />
       <ConfirmDialog
         open={confirmDelete}
@@ -174,28 +245,18 @@ function DocMeta({ doc, project }: { doc: Doc; project?: Project }) {
   )
 }
 
+const cardClass =
+  'rounded-2xl border border-line bg-surface p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_6px_20px_rgba(0,0,0,0.04)]'
+
 interface Heading {
   id: string
   text: string
   level: number
 }
 
-function OutlineCard({
-  doc,
-  project,
-  articleRef,
-  scrollRef,
-}: {
-  doc: Doc
-  project?: Project
-  articleRef: RefObject<HTMLElement | null>
-  scrollRef: RefObject<HTMLDivElement | null>
-}) {
+/** h1–h3 of the rendered document, read from the DOM so ids match rehype-slug exactly. */
+function useHeadings(articleRef: RefObject<HTMLElement | null>, content: string | undefined) {
   const [headings, setHeadings] = useState<Heading[]>([])
-  const [active, setActive] = useState<string>()
-  const stats = useMemo(() => readingStats(doc.content), [doc.content])
-
-  // Read headings from the rendered DOM so ids match rehype-slug exactly.
   useEffect(() => {
     const els = articleRef.current?.querySelectorAll<HTMLElement>('.markdown :is(h1, h2, h3)') ?? []
     setHeadings(
@@ -203,12 +264,16 @@ function OutlineCard({
         .filter((h) => h.id)
         .map((h) => ({ id: h.id, level: Number(h.tagName[1]), text: (h.textContent ?? '').replace(/^#/, '').trim() })),
     )
-  }, [doc.content, articleRef])
+  }, [content, articleRef])
+  return headings
+}
 
-  // Scroll spy: the active heading is the last one above the top edge.
+/** Scroll spy: the active heading is the last one above the top edge. */
+function useActiveHeading(headings: Heading[], scrollRef: RefObject<HTMLDivElement | null>) {
+  const [active, setActive] = useState<string>()
   useEffect(() => {
     const root = scrollRef.current
-    if (!root || headings.length === 0) return
+    if (!root || headings.length === 0) return setActive(undefined)
     const onScroll = () => {
       const edge = root.getBoundingClientRect().top + 100
       let current = headings[0]!.id
@@ -225,6 +290,21 @@ function OutlineCard({
     root.addEventListener('scroll', onScroll, { passive: true })
     return () => root.removeEventListener('scroll', onScroll)
   }, [headings, scrollRef])
+  return active
+}
+
+function OutlineCard({
+  doc,
+  project,
+  headings,
+  active,
+}: {
+  doc: Doc
+  project?: Project
+  headings: Heading[]
+  active: string | undefined
+}) {
+  const stats = useMemo(() => readingStats(doc.content), [doc.content])
 
   const minLevel = Math.min(...headings.map((h) => h.level))
 
@@ -235,12 +315,12 @@ function OutlineCard({
 
   return (
     <div className="space-y-3">
-      <div className="rounded-2xl border border-line bg-surface p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_6px_20px_rgba(0,0,0,0.04)]">
+      <div className={cardClass}>
         <div className="px-2 pb-1.5 text-[12.5px] font-medium text-ink-muted">On this page</div>
         {headings.length === 0 ? (
           <p className="px-2 pb-1 text-[12.5px] text-ink-faint">No headings</p>
         ) : (
-          <nav className="max-h-[55vh] overflow-y-auto">
+          <nav className="max-h-[45vh] overflow-y-auto">
             {headings.map((h) => (
               <button
                 key={h.id}
@@ -259,7 +339,7 @@ function OutlineCard({
           </nav>
         )}
       </div>
-      <div className="rounded-2xl border border-line bg-surface p-3 text-[12.5px] shadow-[0_1px_2px_rgba(0,0,0,0.03),0_6px_20px_rgba(0,0,0,0.04)]">
+      <div className={clsx(cardClass, 'text-[12.5px]')}>
         <div className="px-2 pb-1.5 font-medium text-ink-muted">Details</div>
         <dl className="space-y-1 px-2 text-ink-muted">
           <Detail label="Project">{project ? `${project.icon} ${project.name}` : '—'}</Detail>

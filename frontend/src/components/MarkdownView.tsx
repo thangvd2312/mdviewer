@@ -44,7 +44,7 @@ export function CodeBlock({ lang, text, children }: { lang?: string; text: strin
 
   return (
     <div className="code-card overflow-hidden rounded-2xl border border-line bg-raised">
-      <div className="flex h-10 items-center gap-2 pr-1.5 pl-4 text-[12.5px] text-ink-muted select-none">
+      <div data-annot-skip className="flex h-10 items-center gap-2 pr-1.5 pl-4 text-[12.5px] text-ink-muted select-none">
         <CodeXml className="size-4" />
         <span className="font-medium">{languageLabel(lang)}</span>
         <div className="ml-auto flex">
@@ -102,6 +102,7 @@ function Mermaid({ code }: { code: string }) {
   }
   return (
     <div
+      data-annot-skip
       className="mermaid-card flex min-h-24 justify-center overflow-x-auto rounded-2xl border border-line bg-surface p-5 [&_svg]:h-auto [&_svg]:max-w-full"
       dangerouslySetInnerHTML={state.svg ? { __html: state.svg } : undefined}
     />

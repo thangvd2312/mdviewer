@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AnnotationsModule } from './annotations/annotations.module';
+import { AssistantModule } from './assistant/assistant.module';
 import { AuthModule } from './auth/auth.module';
 import { DocsModule } from './docs/docs.module';
 import { HealthController } from './health/health.controller';
@@ -29,6 +31,8 @@ import { ProjectsModule } from './projects/projects.module';
     AuthModule,
     ProjectsModule,
     DocsModule,
+    AnnotationsModule,
+    AssistantModule,
   ],
   controllers: [HealthController],
 })

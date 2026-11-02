@@ -9,5 +9,6 @@ import { DocsService } from './docs.service';
   imports: [TypeOrmModule.forFeature([Doc]), ProjectsModule],
   controllers: [DocsController],
   providers: [DocsService],
+  exports: [DocsService],
 })
 export class DocsModule {}

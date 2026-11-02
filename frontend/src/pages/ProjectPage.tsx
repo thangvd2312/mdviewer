@@ -6,6 +6,7 @@ import { TopBar } from '../components/AppLayout'
 import { DocRow } from '../components/DocRow'
 import { ProjectDialog } from '../components/ProjectDialog'
 import { Button, buttonClass, ConfirmDialog, Menu, MenuItem } from '../components/ui'
+import { usePageAssistant } from '../lib/assistant'
 import { timeAgo } from '../lib/format'
 import { useDeleteProject, useDocs, useProjects } from '../lib/queries'
 import { useUI } from '../lib/ui'
@@ -26,6 +27,7 @@ export function ProjectPage() {
   const [dragging, setDragging] = useState(false)
 
   const project = projects?.find((p) => p.id === id)
+  usePageAssistant(project ? { context: { page: 'project', projectId: project.id }, title: `${project.icon} ${project.name}` } : null)
   const docs = useMemo(
     () =>
       allDocs

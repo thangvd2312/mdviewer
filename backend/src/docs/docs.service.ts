@@ -91,6 +91,11 @@ export class DocsService {
     await this.docs.delete({ id: doc.id });
   }
 
+  /** Full document, without touching `lastOpenedAt`. Throws 404 unless the user owns it. */
+  findOwned(ownerId: string, id: string) {
+    return this.find(ownerId, id);
+  }
+
   private async find(ownerId: string, id: string) {
     const doc = await this.docs.findOneBy({ id, ownerId });
     if (!doc) throw new NotFoundException('Document not found');

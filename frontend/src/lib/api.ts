@@ -41,6 +41,44 @@ export interface ProjectInput {
   icon?: string
 }
 
+export type AnnotationKind = 'note' | 'important' | 'idea' | 'question' | 'todo' | 'definition'
+
+export interface Annotation {
+  id: string
+  docId: string
+  kind: AnnotationKind
+  quote: string
+  prefix: string
+  suffix: string
+  position: number
+  body: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type AnnotationInput = Pick<Annotation, 'kind' | 'quote' | 'prefix' | 'suffix' | 'position'> & { body?: string }
+
+export interface AssistantContext {
+  page: 'home' | 'project' | 'doc' | 'other'
+  docId?: string
+  projectId?: string
+  sectionTitle?: string
+}
+
+export interface ChatTurn {
+  role: 'user' | 'assistant'
+  content: string
+  /** Passage selected when asking (user turns). */
+  quote?: string
+  /** Section being read when asking (user turns). */
+  section?: string
+}
+
+export type ChatStreamEvent =
+  | { type: 'text'; text: string }
+  | { type: 'done'; stopReason: string | null }
+  | { type: 'error'; message: string }
+
 const TOKEN_KEY = 'viewmd.token'
 export const UNAUTHORIZED_EVENT = 'viewmd:unauthorized'
 
@@ -59,7 +97,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function send(method: string, path: string, body?: unknown, signal?: AbortSignal) {
   const token = tokenStore.get()
   const res = await fetch(`/api${path}`, {
     method,
@@ -68,10 +106,20 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
       ...(token && { Authorization: `Bearer ${token}` }),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal,
   })
-
   if (res.status === 401 && token) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT))
+  return res
+}
 
+async function errorFrom(res: Response) {
+  const data = await res.json().catch(() => undefined)
+  const message = Array.isArray(data?.message) ? data.message[0] : data?.message
+  return new ApiError(res.status, message ?? res.statusText)
+}
+
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await send(method, path, body)
   const text = await res.text()
   const data = text ? JSON.parse(text) : undefined
   if (!res.ok) {
@@ -105,5 +153,42 @@ export const api = {
     create: (input: DocInput & { content: string }) => request<Doc>('POST', '/docs', input),
     update: (id: string, input: DocInput) => request<Doc>('PATCH', `/docs/${id}`, input),
     remove: (id: string) => request<void>('DELETE', `/docs/${id}`),
+  },
+  annotations: {
+    list: (docId: string) => request<Annotation[]>('GET', `/docs/${docId}/annotations`),
+    create: (docId: string, input: AnnotationInput) => request<Annotation>('POST', `/docs/${docId}/annotations`, input),
+    update: (id: string, input: Partial<Pick<Annotation, 'kind' | 'body'>>) =>
+      request<Annotation>('PATCH', `/annotations/${id}`, input),
+    remove: (id: string) => request<void>('DELETE', `/annotations/${id}`),
+  },
+  assistant: {
+    status: () => request<{ enabled: boolean; model: string }>('GET', '/assistant/status'),
+    suggest: (context: AssistantContext, selection?: string) =>
+      request<{ questions: string[] }>('POST', '/assistant/suggest', { context, selection }),
+    /** Streams the answer to the last user turn; resolves when the stream ends. */
+    async chat(
+      messages: ChatTurn[],
+      context: AssistantContext,
+      onEvent: (e: ChatStreamEvent) => void,
+      signal?: AbortSignal,
+    ) {
+      const res = await send('POST', '/assistant/chat', { messages, context }, signal)
+      if (!res.ok || !res.body) throw await errorFrom(res)
+      const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
+      let buffer = ''
+      for (;;) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += value
+        let cut: number
+        while ((cut = buffer.indexOf('\n\n')) >= 0) {
+          const chunk = buffer.slice(0, cut)
+          buffer = buffer.slice(cut + 2)
+          for (const line of chunk.split('\n')) {
+            if (line.startsWith('data: ')) onEvent(JSON.parse(line.slice(6)) as ChatStreamEvent)
+          }
+        }
+      }
+    },
   },
 }

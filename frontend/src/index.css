@@ -13,6 +13,27 @@
   --ink-faint: #9b9ba3;
   --accent: #1f5fd6;
   --danger: #d03b3b;
+
+  /* Sticky-note kinds: marker colour, paper, text highlight */
+  --kind-note: #e9b300;
+  --paper-note: #fff5bf;
+  --hl-note: rgb(250 204 21 / 0.36);
+  --kind-important: #e5484d;
+  --paper-important: #ffdfe2;
+  --hl-important: rgb(244 63 94 / 0.24);
+  --kind-idea: #2fa45a;
+  --paper-idea: #d9f6e1;
+  --hl-idea: rgb(34 197 94 / 0.26);
+  --kind-question: #8457e8;
+  --paper-question: #ebe1ff;
+  --hl-question: rgb(139 92 246 / 0.24);
+  --kind-todo: #ee7a1c;
+  --paper-todo: #ffe5cc;
+  --hl-todo: rgb(249 115 22 / 0.26);
+  --kind-definition: #2f7ae5;
+  --paper-definition: #dbeaff;
+  --hl-definition: rgb(59 130 246 / 0.24);
+  --paper-ink: #2b2a25;
   color-scheme: light;
 }
 
@@ -27,6 +48,26 @@
   --ink-faint: #6c6c75;
   --accent: #79a8ff;
   --danger: #ff7272;
+
+  --kind-note: #f2c94c;
+  --paper-note: #3b3520;
+  --hl-note: rgb(250 204 21 / 0.26);
+  --kind-important: #ff6b78;
+  --paper-important: #432329;
+  --hl-important: rgb(251 113 133 / 0.26);
+  --kind-idea: #4cc477;
+  --paper-idea: #1f3a28;
+  --hl-idea: rgb(74 222 128 / 0.22);
+  --kind-question: #a585ff;
+  --paper-question: #312a4a;
+  --hl-question: rgb(167 139 250 / 0.26);
+  --kind-todo: #ff9a4d;
+  --paper-todo: #43301f;
+  --hl-todo: rgb(251 146 60 / 0.25);
+  --kind-definition: #6ba5ff;
+  --paper-definition: #1f2f47;
+  --hl-definition: rgb(96 165 250 / 0.25);
+  --paper-ink: #ecebe6;
   color-scheme: dark;
 }
 
@@ -361,4 +402,56 @@ body {
 .dark .hljs-deletion {
   color: #ff9aa8;
   background: #3a1f24;
+}
+
+/* ───────────────────────── Sticky-note highlights ───────────────────────── */
+/* Painted with the CSS Custom Highlight API, so the rendered Markdown DOM is never touched. */
+
+::highlight(annot-note) {
+  background-color: var(--hl-note);
+}
+::highlight(annot-important) {
+  background-color: var(--hl-important);
+}
+::highlight(annot-idea) {
+  background-color: var(--hl-idea);
+}
+::highlight(annot-question) {
+  background-color: var(--hl-question);
+}
+::highlight(annot-todo) {
+  background-color: var(--hl-todo);
+}
+::highlight(annot-definition) {
+  background-color: var(--hl-definition);
+}
+::highlight(annot-active) {
+  text-decoration: underline 2px;
+  text-decoration-color: color-mix(in srgb, var(--ink) 55%, transparent);
+  text-underline-offset: 3px;
+}
+
+/* Answers in the assistant panel use the document styles, a size smaller. */
+.markdown.compact {
+  font-size: 14px;
+  line-height: 1.65;
+}
+.markdown.compact :is(h1, h2, h3) {
+  font-size: 1.05em;
+  margin: 1em 0 0.4em;
+  padding: 0;
+  border: 0;
+}
+.markdown.compact > :last-child {
+  margin-bottom: 0;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+.animate-pop {
+  animation: pop-in 0.14s ease-out;
 }
