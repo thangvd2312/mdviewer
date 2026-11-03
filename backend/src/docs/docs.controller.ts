@@ -1,7 +1,7 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard, AuthUser } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { CreateDocDto, ListDocsQuery, UpdateDocDto } from './docs.dto';
+import { CreateDocDto, ListDocsQuery, SharingDto, UpdateDocDto } from './docs.dto';
 import { DocsService } from './docs.service';
 
 @Controller('docs')
@@ -27,6 +27,12 @@ export class DocsController {
   @Patch(':id')
   update(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateDocDto) {
     return this.docs.update(user.id, id, dto);
+  }
+
+  /** Publish / unpublish the doc and turn comments on or off. */
+  @Put(':id/sharing')
+  setSharing(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: SharingDto) {
+    return this.docs.setSharing(user.id, id, dto);
   }
 
   @Delete(':id')

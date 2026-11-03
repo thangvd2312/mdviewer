@@ -1,12 +1,16 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   api,
   type Annotation,
   type AnnotationInput,
+  type CommentPage,
+  type Doc,
   type DocInput,
   type DocSummary,
+  type ExploreQuery,
   type Project,
   type ProjectInput,
+  type SharingInput,
 } from './api'
 
 export const keys = {
@@ -16,6 +20,66 @@ export const keys = {
   search: (q: string) => ['search', q] as const,
   annotations: (docId: string) => ['annotations', docId] as const,
   assistantStatus: ['assistant', 'status'] as const,
+  explore: (q: ExploreQuery) => ['explore', q] as const,
+  publicDoc: (slug: string) => ['public', 'doc', slug] as const,
+  comments: (slug: string) => ['public', 'comments', slug] as const,
+}
+
+const EXPLORE_PAGE = 20
+
+/** Published docs for Explore, a page at a time. */
+export const useExplore = (q: Omit<ExploreQuery, 'offset' | 'limit'>) =>
+  useInfiniteQuery({
+    queryKey: keys.explore(q),
+    queryFn: ({ pageParam }) => api.public.list({ ...q, offset: pageParam, limit: EXPLORE_PAGE }),
+    initialPageParam: 0,
+    getNextPageParam: (last, pages) => (last.hasMore ? pages.length * EXPLORE_PAGE : undefined),
+    placeholderData: (prev) => prev,
+  })
+
+export const usePublicDoc = (slug: string | undefined) =>
+  useQuery({ queryKey: keys.publicDoc(slug ?? ''), enabled: Boolean(slug), queryFn: () => api.public.get(slug!) })
+
+/** A document's comment threads, a page at a time (newest first). */
+export const useComments = (slug: string) =>
+  useInfiniteQuery({
+    queryKey: keys.comments(slug),
+    queryFn: ({ pageParam }) => api.public.comments(slug, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last: CommentPage) => last.nextCursor ?? undefined,
+  })
+
+export const useBlocks = (enabled: boolean) =>
+  useInfiniteQuery({
+    queryKey: ['public', 'blocks'],
+    enabled,
+    queryFn: ({ pageParam }) => api.public.blocks(pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (last, pages) => (last.hasMore ? pages.length * 50 : undefined),
+  })
+
+/** Publish / unpublish a doc or toggle its comments, keeping the cached doc and lists in sync. */
+export function useSetSharing() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...input }: SharingInput & { id: string }) => api.docs.setSharing(id, input),
+    onSuccess: (doc: Doc) => {
+      queryClient.setQueryData(keys.doc(doc.id), doc)
+      queryClient.setQueryData<DocSummary[]>(keys.docs, (list) =>
+        list?.map((d) =>
+          d.id === doc.id
+            ? { ...d, slug: doc.slug, publishedAt: doc.publishedAt, allowComments: doc.allowComments }
+            : d,
+        ),
+      )
+      queryClient.invalidateQueries({ queryKey: ['explore'] })
+      if (doc.slug) {
+        queryClient.invalidateQueries({ queryKey: keys.publicDoc(doc.slug) })
+        // Turning comments on/off changes what the comment section offers.
+        queryClient.invalidateQueries({ queryKey: keys.comments(doc.slug) })
+      }
+    },
+  })
 }
 
 export const useProjects = () => useQuery({ queryKey: keys.projects, queryFn: api.projects.list })

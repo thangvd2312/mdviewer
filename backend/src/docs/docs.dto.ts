@@ -1,5 +1,5 @@
 import { Transform, Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from 'class-validator';
 
 const CONTENT_MAX = 2_000_000;
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
@@ -37,6 +37,17 @@ export class UpdateDocDto {
   @IsOptional()
   @IsUUID()
   projectId?: string | null;
+}
+
+export class SharingDto {
+  /** true = readable by anyone at /s/<slug> and listed on Explore. */
+  @IsOptional()
+  @IsBoolean()
+  public?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  allowComments?: boolean;
 }
 
 export class ListDocsQuery {

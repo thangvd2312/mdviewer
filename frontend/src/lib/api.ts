@@ -23,6 +23,111 @@ export interface DocSummary {
   createdAt: string
   updatedAt: string
   lastOpenedAt: string
+  /** Public address /s/<slug> (kept after unpublishing); null = never published. */
+  slug: string | null
+  /** Set while the doc is public; null = private. */
+  publishedAt: string | null
+  allowComments: boolean
+}
+
+export interface SharingInput {
+  public?: boolean
+  allowComments?: boolean
+}
+
+export interface PublicAuthor {
+  name: string
+  login: string | null
+  avatarUrl: string | null
+}
+
+/** A published doc as listed on Explore. */
+export interface PublicDocSummary {
+  slug: string
+  title: string
+  excerpt: string
+  publishedAt: string
+  updatedAt: string
+  viewCount: number
+  commentCount: number
+  author: PublicAuthor
+}
+
+/** A published doc on its reading page. */
+export interface PublicDoc extends PublicDocSummary {
+  id: string
+  content: string
+  allowComments: boolean
+  /** The viewer wrote it. */
+  isOwner: boolean
+}
+
+export interface ExploreQuery {
+  q?: string
+  sort?: 'latest' | 'popular'
+  author?: string
+  offset?: number
+  limit?: number
+}
+
+export type CommentAuthor =
+  | { kind: 'user'; name: string; login: string | null; avatarUrl: string | null; isDocAuthor: boolean }
+  | { kind: 'guest'; name: string }
+  | { kind: 'gone' }
+
+export interface PublicComment {
+  id: string
+  /** Top-level comment it replies to. */
+  parentId: string | null
+  body: string
+  createdAt: string
+  editedAt: string | null
+  /** Deleted but kept because it has replies. */
+  deleted: boolean
+  author: CommentAuthor
+  /** Written by the signed-in viewer. */
+  mine: boolean
+  /** Page author only: */
+  hidden?: boolean
+  blocked?: boolean
+  device?: string
+}
+
+/** A top-level comment with its first replies. */
+export interface Thread {
+  comment: PublicComment
+  replies: PublicComment[]
+  /** Cursor for more replies; null = all shown. */
+  moreReplies: string | null
+}
+
+/** One page of a document's comments (newest threads first). */
+export interface CommentPage {
+  threads: Thread[]
+  /** Cursor for older threads; null = no more. */
+  nextCursor: string | null
+  /** Comments everyone can see. */
+  count: number
+  allowComments: boolean
+  /** The viewer wrote the page: may hide, delete and block. */
+  canModerate: boolean
+}
+
+export interface CommentBlockInfo {
+  id: string
+  kind: 'user' | 'guest'
+  name: string
+  login: string | null
+  device: string | null
+  createdAt: string
+}
+
+export interface CommentInput {
+  body: string
+  parentId?: string
+  guestName?: string
+  website?: string
+  elapsedMs?: number
 }
 
 export interface Doc extends DocSummary {
@@ -149,13 +254,20 @@ export class ApiError extends Error {
   }
 }
 
-async function send(method: string, path: string, body?: unknown, signal?: AbortSignal) {
+async function send(
+  method: string,
+  path: string,
+  body?: unknown,
+  signal?: AbortSignal,
+  headers?: Record<string, string>,
+) {
   const token = tokenStore.get()
   const res = await fetch(`/api${path}`, {
     method,
     headers: {
       ...(body !== undefined && { 'Content-Type': 'application/json' }),
       ...(token && { Authorization: `Bearer ${token}` }),
+      ...headers,
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
     signal,
@@ -170,8 +282,8 @@ async function errorFrom(res: Response) {
   return new ApiError(res.status, message ?? res.statusText)
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await send(method, path, body)
+async function request<T>(method: string, path: string, body?: unknown, headers?: Record<string, string>): Promise<T> {
+  const res = await send(method, path, body, undefined, headers)
   const text = await res.text()
   const data = text ? JSON.parse(text) : undefined
   if (!res.ok) {
@@ -180,6 +292,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   }
   return data as T
 }
+
+const guestHeader = (token?: string) => (token ? { 'X-Guest-Token': token } : undefined)
 
 const qs = (params: Record<string, string | number | undefined>) => {
   const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== '')
@@ -205,6 +319,36 @@ export const api = {
     create: (input: DocInput & { content: string }) => request<Doc>('POST', '/docs', input),
     update: (id: string, input: DocInput) => request<Doc>('PATCH', `/docs/${id}`, input),
     remove: (id: string) => request<void>('DELETE', `/docs/${id}`),
+    setSharing: (id: string, input: SharingInput) => request<Doc>('PUT', `/docs/${id}/sharing`, input),
+  },
+  public: {
+    list: (q: ExploreQuery) =>
+      request<{ items: PublicDocSummary[]; hasMore: boolean }>('GET', '/public/docs' + qs({ ...q })),
+    get: (slug: string) => request<PublicDoc>('GET', `/public/docs/${encodeURIComponent(slug)}`),
+    comments: (slug: string, before?: string) =>
+      request<CommentPage>('GET', `/public/docs/${encodeURIComponent(slug)}/comments` + qs({ before })),
+    replies: (commentId: string, after?: string) =>
+      request<{ replies: PublicComment[]; moreReplies: string | null }>(
+        'GET',
+        `/public/comments/${commentId}/replies` + qs({ after }),
+      ),
+    /** Guests get a `guestToken` back: keep it to edit or delete the comment later. */
+    comment: (slug: string, input: CommentInput) =>
+      request<{ comment: PublicComment; guestToken?: string }>(
+        'POST',
+        `/public/docs/${encodeURIComponent(slug)}/comments`,
+        input,
+      ),
+    editComment: (id: string, body: string, guestToken?: string) =>
+      request<PublicComment>('PATCH', `/public/comments/${id}`, { body }, guestHeader(guestToken)),
+    deleteComment: (id: string, guestToken?: string) =>
+      request<void>('DELETE', `/public/comments/${id}`, undefined, guestHeader(guestToken)),
+    hideComment: (id: string, hidden: boolean) => request<void>('PUT', `/public/comments/${id}/hidden`, { hidden }),
+    blockAuthor: (id: string) => request<void>('POST', `/public/comments/${id}/block`),
+    unblockAuthor: (id: string) => request<void>('DELETE', `/public/comments/${id}/block`),
+    blocks: (offset = 0) =>
+      request<{ items: CommentBlockInfo[]; hasMore: boolean }>('GET', '/public/blocks' + qs({ offset, limit: 50 })),
+    removeBlock: (id: string) => request<void>('DELETE', `/public/blocks/${id}`),
   },
   annotations: {
     list: (docId: string) => request<Annotation[]>('GET', `/docs/${docId}/annotations`),

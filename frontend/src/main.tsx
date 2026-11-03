@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { createBrowserRouter, Navigate, RouterProvider, useLocation } from 'react-router'
 import type { ReactNode } from 'react'
 import { AppLayout } from './components/AppLayout'
+import { OptionalAuthLayout } from './components/PublicLayout'
 import { Spinner } from './components/ui'
 import './index.css'
 import { ApiError } from './lib/api'
@@ -12,9 +13,11 @@ import { UIProvider } from './lib/ui'
 import { AuthCallbackPage, LoginPage } from './pages/AuthPage'
 import { DocPage } from './pages/DocPage'
 import { EditorPage } from './pages/EditorPage'
+import { ExplorePage } from './pages/ExplorePage'
 import { HomePage } from './pages/HomePage'
 import { NotFound } from './pages/NotFound'
 import { ProjectPage } from './pages/ProjectPage'
+import { PublicDocPage } from './pages/PublicDocPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -44,6 +47,14 @@ const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   { path: '/auth/callback', element: <AuthCallbackPage /> },
   { path: '/register', element: <Navigate to="/login" replace /> },
+  // Open to everyone; inside the full app when signed in.
+  {
+    element: <OptionalAuthLayout />,
+    children: [
+      { path: 'explore', element: <ExplorePage /> },
+      { path: 's/:slug', element: <PublicDocPage /> },
+    ],
+  },
   {
     element: (
       <RequireAuth>

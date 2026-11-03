@@ -326,12 +326,18 @@ export function useAssistantState() {
   return ctx
 }
 
-/** Publishes what the current page is showing, so the assistant can use it as context. */
+/**
+ * Publishes what the current page is showing, so the assistant can use it as context.
+ * Does nothing where there is no assistant (public pages viewed signed out).
+ */
 export function usePageAssistant(info: PageInfo | null) {
-  const { setPage } = useAssistant()
+  const setPage = useContext(ActionsContext)?.setPage
   const serialized = JSON.stringify(info)
   useEffect(() => {
-    setPage(serialized === 'null' ? null : (JSON.parse(serialized) as PageInfo))
+    setPage?.(serialized === 'null' ? null : (JSON.parse(serialized) as PageInfo))
   }, [serialized, setPage])
-  useEffect(() => () => setPage(null), [setPage])
+  useEffect(() => () => setPage?.(null), [setPage])
 }
+
+/** The assistant's actions, or null where there is no assistant (signed out). */
+export const useOptionalAssistant = () => useContext(ActionsContext)

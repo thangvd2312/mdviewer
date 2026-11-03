@@ -14,12 +14,49 @@ import { IconButton } from './ui'
 const PLAIN = ['mermaid', 'text', 'txt', 'plain', 'plaintext']
 
 const LANGUAGE_NAMES: Record<string, string> = {
-  js: 'JavaScript', javascript: 'JavaScript', jsx: 'JSX', ts: 'TypeScript', typescript: 'TypeScript', tsx: 'TSX',
-  py: 'Python', python: 'Python', rb: 'Ruby', go: 'Go', rs: 'Rust', rust: 'Rust', java: 'Java', kt: 'Kotlin',
-  cs: 'C#', csharp: 'C#', cpp: 'C++', c: 'C', php: 'PHP', swift: 'Swift', dart: 'Dart', sql: 'SQL',
-  sh: 'Shell', bash: 'Bash', zsh: 'Zsh', shell: 'Shell', console: 'Console', ps1: 'PowerShell', powershell: 'PowerShell',
-  json: 'JSON', yaml: 'YAML', yml: 'YAML', toml: 'TOML', xml: 'XML', html: 'HTML', css: 'CSS', scss: 'SCSS',
-  md: 'Markdown', markdown: 'Markdown', diff: 'Diff', dockerfile: 'Dockerfile', graphql: 'GraphQL', mermaid: 'Mermaid',
+  js: 'JavaScript',
+  javascript: 'JavaScript',
+  jsx: 'JSX',
+  ts: 'TypeScript',
+  typescript: 'TypeScript',
+  tsx: 'TSX',
+  py: 'Python',
+  python: 'Python',
+  rb: 'Ruby',
+  go: 'Go',
+  rs: 'Rust',
+  rust: 'Rust',
+  java: 'Java',
+  kt: 'Kotlin',
+  cs: 'C#',
+  csharp: 'C#',
+  cpp: 'C++',
+  c: 'C',
+  php: 'PHP',
+  swift: 'Swift',
+  dart: 'Dart',
+  sql: 'SQL',
+  sh: 'Shell',
+  bash: 'Bash',
+  zsh: 'Zsh',
+  shell: 'Shell',
+  console: 'Console',
+  ps1: 'PowerShell',
+  powershell: 'PowerShell',
+  json: 'JSON',
+  yaml: 'YAML',
+  yml: 'YAML',
+  toml: 'TOML',
+  xml: 'XML',
+  html: 'HTML',
+  css: 'CSS',
+  scss: 'SCSS',
+  md: 'Markdown',
+  markdown: 'Markdown',
+  diff: 'Diff',
+  dockerfile: 'Dockerfile',
+  graphql: 'GraphQL',
+  mermaid: 'Mermaid',
 }
 
 const languageLabel = (lang?: string) =>
@@ -44,11 +81,18 @@ export function CodeBlock({ lang, text, children }: { lang?: string; text: strin
 
   return (
     <div className="code-card overflow-hidden rounded-2xl border border-line bg-raised">
-      <div data-annot-skip className="flex h-10 items-center gap-2 pr-1.5 pl-4 text-[12.5px] text-ink-muted select-none">
+      <div
+        data-annot-skip
+        className="flex h-10 items-center gap-2 pr-1.5 pl-4 text-[12.5px] text-ink-muted select-none"
+      >
         <CodeXml className="size-4" />
         <span className="font-medium">{languageLabel(lang)}</span>
         <div className="ml-auto flex">
-          <IconButton label={wrap ? 'Disable line wrap' : 'Wrap lines'} active={wrap} onClick={() => setWrap((w) => !w)}>
+          <IconButton
+            label={wrap ? 'Disable line wrap' : 'Wrap lines'}
+            active={wrap}
+            onClick={() => setWrap((w) => !w)}
+          >
             <WrapText />
           </IconButton>
           <IconButton label={copied ? 'Copied' : 'Copy code'} onClick={copy}>
@@ -138,7 +182,8 @@ const components: Components = {
   a({ node: _node, href, children, ...rest }) {
     const external = href && /^[a-z][a-z\d+.-]*:/i.test(href)
     return (
-      <a href={href} {...rest} {...(external && { target: '_blank', rel: 'noopener noreferrer' })}>
+      // Docs can be public: outside links open in a new tab and aren't endorsed for search engines.
+      <a href={href} {...rest} {...(external && { target: '_blank', rel: 'nofollow ugc noopener noreferrer' })}>
         {children}
       </a>
     )
@@ -151,7 +196,7 @@ const components: Components = {
     )
   },
   img({ node: _node, alt, ...rest }) {
-    return <img alt={alt ?? ''} loading="lazy" {...rest} />
+    return <img alt={alt ?? ''} loading="lazy" referrerPolicy="no-referrer" {...rest} />
   },
   h1: heading('h1'),
   h2: heading('h2'),
@@ -174,7 +219,13 @@ function rehypeTrimCode() {
 const remarkPlugins = [remarkGfm]
 const rehypePlugins = [rehypeSlug, rehypeTrimCode, [rehypeHighlight, { detect: false, plainText: PLAIN }] as const]
 
-export const MarkdownView = memo(function MarkdownView({ content, className }: { content: string; className?: string }) {
+export const MarkdownView = memo(function MarkdownView({
+  content,
+  className,
+}: {
+  content: string
+  className?: string
+}) {
   return (
     <div className={clsx('markdown', className)}>
       <Markdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins as never} components={components}>

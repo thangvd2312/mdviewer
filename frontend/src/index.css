@@ -480,3 +480,16 @@ body {
     animation: none;
   }
 }
+
+/* A comment reached from a link (or just posted) glows briefly. */
+@keyframes comment-flash {
+  0%,
+  35% {
+    background-color: color-mix(in srgb, var(--accent) 10%, transparent);
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: 0 0 0 8px transparent;
+  }
+}

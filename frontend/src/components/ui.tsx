@@ -1,6 +1,7 @@
 import clsx from 'clsx'
-import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { X } from 'lucide-react'
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger'
 
@@ -51,6 +52,40 @@ export function IconButton({
 export const inputClass =
   'h-9 w-full rounded-lg border border-line bg-surface px-3 text-[14px] text-ink outline-none transition placeholder:text-ink-faint focus:border-ink-faint focus:ring-4 focus:ring-hover'
 
+/** How many dialogs are open: the app behind them is inert (no focus, clicks or screen reader) while any is. */
+let openDialogs = 0
+
+/**
+ * Recently focused or pressed elements, newest last — what a dialog gives focus back to. A dialog
+ * takes the newest one outside itself: its own autoFocus moves focus inside before its effects run,
+ * Safari doesn't focus buttons on click, and an opener may itself sit in another (parent) dialog.
+ */
+const recentTriggers: HTMLElement[] = []
+if (typeof document !== 'undefined') {
+  const remember = (e: Event) => {
+    const el =
+      e.target instanceof Element
+        ? e.target.closest<HTMLElement>('button, a, input, textarea, select, [tabindex]')
+        : null
+    if (!el || recentTriggers.at(-1) === el) return
+    recentTriggers.push(el)
+    if (recentTriggers.length > 20) recentTriggers.shift()
+  }
+  document.addEventListener('focusin', remember, true)
+  document.addEventListener('pointerdown', remember, true)
+}
+const setAppInert = (inert: boolean) => document.getElementById('root')?.toggleAttribute('inert', inert)
+
+const openerFor = (dialog: HTMLElement | null) =>
+  [...recentTriggers].reverse().find((el) => el.isConnected && !dialog?.contains(el)) ?? null
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+/**
+ * Dialog over a dimmed page. Takes focus when it opens (unless a child already did, e.g. with
+ * autoFocus), keeps Tab inside, gives focus back on close, and scrolls inside on short screens.
+ */
 export function Modal({
   open,
   onClose,
@@ -64,27 +99,82 @@ export function Modal({
   children: ReactNode
   className?: string
 }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const titleId = useId()
+  // The open/close lifecycle must not re-run when the parent passes a new onClose.
+  const onCloseRef = useRef(onClose)
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose
+  })
+
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const dialog = ref.current
+    const opener = openerFor(dialog)
+    if (dialog && !dialog.contains(document.activeElement)) dialog.focus()
+    openDialogs += 1
+    setAppInert(true)
+    // Escape closes only the topmost dialog.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || !dialog) return
+      const all = document.querySelectorAll('[role="dialog"][aria-modal="true"]')
+      if (all[all.length - 1] === dialog) onCloseRef.current()
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      openDialogs -= 1
+      if (openDialogs === 0) setAppInert(false)
+      // Back to what opened it — unless that's gone (e.g. a menu item), then to the page.
+      if (opener?.isConnected) opener.focus({ preventScroll: true })
+    }
+  }, [open])
+
+  // Keep Tab / Shift+Tab within the dialog.
+  const trapTab = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Tab' || !ref.current) return
+    const items = [...ref.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.offsetParent !== null)
+    if (items.length === 0) return e.preventDefault()
+    const first = items[0]!
+    const last = items.at(-1)!
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === ref.current)) {
+      e.preventDefault()
+      last.focus()
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault()
+      first.focus()
+    }
+  }
 
   if (!open) return null
   return createPortal(
     <div
-      className="fixed inset-0 z-40 flex items-start justify-center bg-black/25 p-4 pt-[12vh] backdrop-blur-[2px] dark:bg-black/50"
+      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/25 p-4 pt-[10vh] backdrop-blur-[2px] dark:bg-black/50"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
+        ref={ref}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
-        className={clsx('w-full max-w-md overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl', className)}
+        aria-labelledby={title ? titleId : undefined}
+        tabIndex={-1}
+        onKeyDown={trapTab}
+        className={clsx(
+          'flex max-h-[calc(100dvh-10vh-1rem)] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl outline-none',
+          className,
+        )}
       >
-        {title && <h2 className="px-5 pt-5 text-[15px] font-semibold">{title}</h2>}
-        {children}
+        {title && (
+          <div className="flex shrink-0 items-center gap-2 pt-3.5 pr-3 pl-5">
+            <h2 id={titleId} className="flex-1 pt-1 text-[15px] font-semibold">
+              {title}
+            </h2>
+            <IconButton label="Close" onClick={onClose}>
+              <X />
+            </IconButton>
+          </div>
+        )}
+        <div className="min-h-0 overflow-y-auto overscroll-contain">{children}</div>
       </div>
     </div>,
     document.body,
@@ -196,12 +286,50 @@ export function MenuItem({
   )
 }
 
+/** On/off toggle. */
+export function Switch({
+  checked,
+  onChange,
+  label,
+  disabled,
+}: {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  label: string
+  disabled?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={clsx(
+        'relative inline-flex h-6 w-10 shrink-0 items-center rounded-full transition-colors disabled:opacity-50',
+        checked ? 'bg-emerald-500 dark:bg-emerald-500' : 'bg-line',
+      )}
+    >
+      <span
+        className={clsx(
+          'inline-block size-5 rounded-full bg-white shadow-sm transition-transform',
+          checked ? 'translate-x-[18px]' : 'translate-x-0.5',
+        )}
+      />
+    </button>
+  )
+}
+
 export const MenuSeparator = () => <div className="my-1 h-px bg-line" />
 
 export function Spinner({ className }: { className?: string }) {
   return (
     <span
-      className={clsx('inline-block size-4 animate-spin rounded-full border-2 border-line border-t-ink-muted', className)}
+      className={clsx(
+        'inline-block size-4 animate-spin rounded-full border-2 border-line border-t-ink-muted',
+        className,
+      )}
     />
   )
 }

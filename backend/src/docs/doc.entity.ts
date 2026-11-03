@@ -44,4 +44,25 @@ export class Doc {
 
   @Column({ type: 'datetime', precision: 3 })
   lastOpenedAt: Date;
+
+  /**
+   * Public address (/s/<slug>), made on first publish and kept after unpublishing so a
+   * re-published doc keeps its link. null = never published.
+   */
+  @Index({ unique: true })
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  slug: string | null;
+
+  /** Set while the doc is public (readable by anyone and listed on Explore); null = private. */
+  @Index()
+  @Column({ type: 'datetime', precision: 3, nullable: true })
+  publishedAt: Date | null;
+
+  /** Whether readers may comment while it's public. */
+  @Column({ default: true })
+  allowComments: boolean;
+
+  /** Public page views (deduplicated per reader for a while; the author's own views don't count). */
+  @Column({ type: 'int', unsigned: true, default: 0 })
+  viewCount: number;
 }

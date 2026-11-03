@@ -1,7 +1,9 @@
 import clsx from 'clsx'
 import {
   ChevronRight,
+  Compass,
   FileText,
+  Globe,
   FolderClosed,
   FolderOpen,
   LogOut,
@@ -91,6 +93,10 @@ export function Sidebar() {
           <SquarePen className="size-4 text-ink-muted" />
           New note
         </NavLink>
+        <NavLink to="/explore" className={rowClass}>
+          <Compass className="size-4 text-ink-muted" />
+          Explore
+        </NavLink>
 
         <Section
           title="Projects"
@@ -121,16 +127,26 @@ export function Sidebar() {
                   >
                     <ChevronRight className={clsx('size-3.5 transition-transform', open && 'rotate-90')} />
                   </button>
-                  <NavLink to={`/p/${p.id}`} onClick={() => !open && toggle(p.id)} className={(s) => clsx(rowClass(s), 'flex-1 pr-8')}>
+                  <NavLink
+                    to={`/p/${p.id}`}
+                    onClick={() => !open && toggle(p.id)}
+                    className={(s) => clsx(rowClass(s), 'flex-1 pr-8')}
+                  >
                     <span className="grid w-4 place-items-center text-[13px] transition-opacity group-hover:opacity-0">
                       {p.icon === '📁' ? (
-                        open ? <FolderOpen className="size-4 text-ink-muted" /> : <FolderClosed className="size-4 text-ink-muted" />
+                        open ? (
+                          <FolderOpen className="size-4 text-ink-muted" />
+                        ) : (
+                          <FolderClosed className="size-4 text-ink-muted" />
+                        )
                       ) : (
                         p.icon
                       )}
                     </span>
                     <span className="truncate">{p.name}</span>
-                    <span className="ml-auto text-[11.5px] text-ink-faint group-hover:opacity-0">{items.length || ''}</span>
+                    <span className="ml-auto text-[11.5px] text-ink-faint group-hover:opacity-0">
+                      {items.length || ''}
+                    </span>
                   </NavLink>
                   <Link
                     to={`/new?project=${p.id}`}
@@ -171,8 +187,12 @@ export function Sidebar() {
           }
         >
           {loose.length === 0 && (
-            <Link to="/new" className="block rounded-lg px-2 py-1 text-[12.5px] text-ink-faint hover:bg-hover hover:text-ink">
-              Quick notes that don’t belong to a project. <span className="underline underline-offset-2">Create one</span>
+            <Link
+              to="/new"
+              className="block rounded-lg px-2 py-1 text-[12.5px] text-ink-faint hover:bg-hover hover:text-ink"
+            >
+              Quick notes that don’t belong to a project.{' '}
+              <span className="underline underline-offset-2">Create one</span>
             </Link>
           )}
           {loose.map((d) => (
@@ -237,6 +257,12 @@ function DocLink({ doc, icon }: { doc: DocSummary; icon?: boolean }) {
       <NavLink to={`/d/${doc.id}`} className={(s) => clsx(rowClass(s), 'pr-8')} title={doc.title}>
         {icon && <FileText className="size-4 shrink-0 text-ink-muted" />}
         <span className="truncate">{doc.title}</span>
+        {doc.publishedAt && (
+          <Globe
+            className="size-3 shrink-0 text-emerald-600 group-hover:hidden dark:text-emerald-400"
+            aria-label="Public"
+          />
+        )}
       </NavLink>
       <DeleteDocButton doc={doc} className={clsx('absolute top-1 right-1', revealOnHover)} />
     </div>
@@ -253,12 +279,15 @@ const THEMES: { value: ThemePref; label: string; icon: ReactNode }[] = [
   { value: 'system', label: 'System theme', icon: <Monitor /> },
 ]
 
-function ThemeToggle() {
+export function ThemeToggle() {
   const { theme, setTheme } = useUI()
   const i = THEMES.findIndex((t) => t.value === theme)
   const next = THEMES[(i + 1) % THEMES.length]!
   return (
-    <IconButton label={`${THEMES[i]!.label} — switch to ${next.label.toLowerCase()}`} onClick={() => setTheme(next.value)}>
+    <IconButton
+      label={`${THEMES[i]!.label} — switch to ${next.label.toLowerCase()}`}
+      onClick={() => setTheme(next.value)}
+    >
       {THEMES[i]!.icon}
     </IconButton>
   )

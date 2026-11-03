@@ -4,6 +4,7 @@ import { JwtModule, JwtModuleOptions } from '@nestjs/jwt';
 import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
+import { OptionalAuthGuard } from './optional-auth.guard';
 import { AuthService } from './auth.service';
 import { GithubOAuthService } from './github-oauth.service';
 
@@ -20,7 +21,7 @@ import { GithubOAuthService } from './github-oauth.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, AuthGuard, GithubOAuthService],
-  exports: [AuthGuard, JwtModule],
+  providers: [AuthService, AuthGuard, OptionalAuthGuard, GithubOAuthService],
+  exports: [AuthGuard, OptionalAuthGuard, JwtModule],
 })
 export class AuthModule {}

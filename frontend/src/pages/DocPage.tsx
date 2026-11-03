@@ -1,11 +1,24 @@
 import clsx from 'clsx'
-import { ClipboardCopy, Download, Ellipsis, FolderInput, PanelRight, Pencil, StickyNote, Trash2 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router'
+import {
+  ClipboardCopy,
+  Download,
+  Ellipsis,
+  FolderInput,
+  Globe,
+  PanelRight,
+  Pencil,
+  Share2,
+  StickyNote,
+  Trash2,
+} from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { TopBar } from '../components/AppLayout'
+import { cardClass, OutlineNav, useActiveHeading, useHeadings, type Heading } from '../components/DocOutline'
 import { MoveDialog } from '../components/MoveDialog'
 import { AnnotatedContent } from '../components/notes/AnnotatedContent'
 import { NotesList } from '../components/notes/NotesList'
+import { ShareDialog } from '../components/ShareDialog'
 import { buttonClass, ConfirmDialog, IconButton, Menu, MenuItem, MenuSeparator, Modal } from '../components/ui'
 import type { Doc, Project } from '../lib/api'
 import { timeAgo } from '../lib/format'
@@ -31,6 +44,19 @@ export function DocPage() {
   const [outlineOpen, setOutlineOpen] = useStoredState('viewmd.outline', true)
   const [moving, setMoving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  // ?share=1 (from the public page's "Settings") opens the share dialog.
+  const [params, setParams] = useSearchParams()
+  const sharingOpen = params.get('share') === '1'
+  const setSharingOpen = (open: boolean) =>
+    setParams(
+      (p) => {
+        const next = new URLSearchParams(p)
+        if (open) next.set('share', '1')
+        else next.delete('share')
+        return next
+      },
+      { replace: !open },
+    )
   const scrollRef = useRef<HTMLDivElement>(null)
   const articleRef = useRef<HTMLElement>(null)
 
@@ -129,8 +155,21 @@ export function DocPage() {
               {annotations.length > 0 ? annotations.length : <span className="max-sm:hidden">Notes</span>}
             </button>
             <Link to={`/d/${doc.id}/edit`} className={buttonClass('ghost')} title="Edit (E)">
-              <Pencil className="size-3.5" /> Edit
+              <Pencil className="size-3.5" /> <span className="max-sm:hidden">Edit</span>
             </Link>
+            <button
+              type="button"
+              onClick={() => setSharingOpen(true)}
+              className={clsx(
+                buttonClass('ghost'),
+                doc.publishedAt &&
+                  'text-emerald-700 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-400',
+              )}
+              title={doc.publishedAt ? 'Public — share settings' : 'Share'}
+            >
+              {doc.publishedAt ? <Globe className="size-3.5" /> : <Share2 className="size-3.5" />}
+              <span className="max-sm:hidden">{doc.publishedAt ? 'Public' : 'Share'}</span>
+            </button>
             <IconButton
               label={outlineOpen ? 'Hide outline' : 'Show outline'}
               active={outlineOpen}
@@ -192,7 +231,9 @@ export function DocPage() {
                 <div className={cardClass}>
                   <div className="flex items-center px-2 pb-2 text-[12.5px] font-medium text-ink-muted">
                     Sticky notes
-                    {annotations.length > 0 && <span className="ml-auto font-normal text-ink-faint">{annotations.length}</span>}
+                    {annotations.length > 0 && (
+                      <span className="ml-auto font-normal text-ink-faint">{annotations.length}</span>
+                    )}
                   </div>
                   <div className="max-h-[32vh] overflow-y-auto">
                     <NotesList annotations={annotations} orphanIds={orphans} onOpen={openNote} onDelete={deleteNote} />
@@ -209,15 +250,12 @@ export function DocPage() {
           <NotesList annotations={annotations} orphanIds={orphans} onOpen={openNote} onDelete={deleteNote} />
         </div>
       </Modal>
+      <ShareDialog doc={doc} open={sharingOpen} onClose={() => setSharingOpen(false)} />
       <MoveDialog open={moving} current={doc.projectId} onClose={() => setMoving(false)} onMove={move} />
       <ConfirmDialog
         open={confirmDelete}
         title="Delete document?"
-        message={
-          <>
-            “{doc.title}” will be permanently deleted. This can’t be undone.
-          </>
-        }
+        message={<>“{doc.title}” will be permanently deleted. This can’t be undone.</>}
         busy={del.isPending}
         onConfirm={remove}
         onClose={() => setConfirmDelete(false)}
@@ -238,59 +276,23 @@ function DocMeta({ doc, project }: { doc: Doc; project?: Project }) {
           <span>·</span>
         </>
       )}
+      {doc.publishedAt && doc.slug && (
+        <>
+          <Link
+            to={`/s/${doc.slug}`}
+            className="flex items-center gap-1 rounded-md bg-emerald-500/10 px-1.5 py-0.5 font-medium text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-400"
+            title="Open the public page"
+          >
+            <Globe className="size-3" /> Public
+          </Link>
+          <span>·</span>
+        </>
+      )}
       <span title={new Date(doc.updatedAt).toLocaleString()}>Updated {timeAgo(doc.updatedAt)}</span>
       <span>·</span>
       <span>{minutes} min read</span>
     </div>
   )
-}
-
-const cardClass =
-  'rounded-2xl border border-line bg-surface p-3 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_6px_20px_rgba(0,0,0,0.04)]'
-
-interface Heading {
-  id: string
-  text: string
-  level: number
-}
-
-/** h1–h3 of the rendered document, read from the DOM so ids match rehype-slug exactly. */
-function useHeadings(articleRef: RefObject<HTMLElement | null>, content: string | undefined) {
-  const [headings, setHeadings] = useState<Heading[]>([])
-  useEffect(() => {
-    const els = articleRef.current?.querySelectorAll<HTMLElement>('.markdown :is(h1, h2, h3)') ?? []
-    setHeadings(
-      [...els]
-        .filter((h) => h.id)
-        .map((h) => ({ id: h.id, level: Number(h.tagName[1]), text: (h.textContent ?? '').replace(/^#/, '').trim() })),
-    )
-  }, [content, articleRef])
-  return headings
-}
-
-/** Scroll spy: the active heading is the last one above the top edge. */
-function useActiveHeading(headings: Heading[], scrollRef: RefObject<HTMLDivElement | null>) {
-  const [active, setActive] = useState<string>()
-  useEffect(() => {
-    const root = scrollRef.current
-    if (!root || headings.length === 0) return setActive(undefined)
-    const onScroll = () => {
-      const edge = root.getBoundingClientRect().top + 100
-      let current = headings[0]!.id
-      for (const h of headings) {
-        const el = document.getElementById(h.id)
-        if (el && el.getBoundingClientRect().top <= edge) current = h.id
-        else break
-      }
-      // At the very bottom, highlight the last heading even if it can't reach the top.
-      if (root.scrollTop + root.clientHeight >= root.scrollHeight - 4) current = headings.at(-1)!.id
-      setActive(current)
-    }
-    onScroll()
-    root.addEventListener('scroll', onScroll, { passive: true })
-    return () => root.removeEventListener('scroll', onScroll)
-  }, [headings, scrollRef])
-  return active
 }
 
 function OutlineCard({
@@ -306,39 +308,9 @@ function OutlineCard({
 }) {
   const stats = useMemo(() => readingStats(doc.content), [doc.content])
 
-  const minLevel = Math.min(...headings.map((h) => h.level))
-
-  const jump = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    history.replaceState(history.state, '', `#${id}`)
-  }
-
   return (
     <div className="space-y-3">
-      <div className={cardClass}>
-        <div className="px-2 pb-1.5 text-[12.5px] font-medium text-ink-muted">On this page</div>
-        {headings.length === 0 ? (
-          <p className="px-2 pb-1 text-[12.5px] text-ink-faint">No headings</p>
-        ) : (
-          <nav className="max-h-[45vh] overflow-y-auto">
-            {headings.map((h) => (
-              <button
-                key={h.id}
-                type="button"
-                onClick={() => jump(h.id)}
-                style={{ paddingLeft: 8 + (h.level - minLevel) * 12 }}
-                className={clsx(
-                  'block w-full truncate rounded-md py-1 pr-2 text-left text-[12.5px] leading-snug transition-colors hover:text-ink',
-                  active === h.id ? 'bg-hover font-medium text-ink' : 'text-ink-muted',
-                )}
-                title={h.text}
-              >
-                {h.text}
-              </button>
-            ))}
-          </nav>
-        )}
-      </div>
+      <OutlineNav headings={headings} active={active} />
       <div className={clsx(cardClass, 'text-[12.5px]')}>
         <div className="px-2 pb-1.5 font-medium text-ink-muted">Details</div>
         <dl className="space-y-1 px-2 text-ink-muted">

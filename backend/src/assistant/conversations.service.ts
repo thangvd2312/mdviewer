@@ -48,7 +48,7 @@ export class ConversationsService {
 
   /** Starts a conversation in the given context (checks the user owns the doc/project). */
   async create(ownerId: string, ctx: AssistantContextDto, firstQuestion: string) {
-    if (ctx.page === 'doc' && ctx.docId) await this.docs.findOwned(ownerId, ctx.docId);
+    if (ctx.page === 'doc' && ctx.docId) await this.docs.findReadable(ownerId, ctx.docId);
     if (ctx.page === 'project' && ctx.projectId) await this.projects.get(ownerId, ctx.projectId);
     const now = new Date();
     return this.conversations.save(

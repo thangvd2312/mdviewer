@@ -23,7 +23,10 @@ export function LoginPage() {
   const [redirecting, setRedirecting] = useState(false)
   const error = params.get('error')
 
-  if (user) return <Navigate to="/" replace />
+  if (user) {
+    const from = (location.state as { from?: string } | null)?.from
+    return <Navigate to={from?.startsWith('/') ? from : '/'} replace />
+  }
 
   const start = () => {
     // Remember where the user was heading; the OAuth round-trip loses router state.
@@ -66,8 +69,15 @@ export function LoginPage() {
           )}
 
           <p className="mt-6 text-[12.5px] leading-relaxed text-ink-faint">
-            We only read your public profile and primary email to create your account. Your documents stay private to you.
+            We only read your public profile and primary email to create your account. Your documents stay private
+            unless you choose to publish them.
           </p>
+          <Link
+            to="/explore"
+            className="mt-6 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-ink-muted hover:text-ink"
+          >
+            Or browse what people have shared →
+          </Link>
         </div>
       </div>
 

@@ -5,6 +5,7 @@ import { DataSource } from 'typeorm';
 import { Annotation } from './annotations/annotation.entity';
 import { Conversation, Message } from './assistant/conversation.entity';
 import { Usage } from './assistant/usage.entity';
+import { Comment, CommentBlock } from './public/comment.entity';
 import { Doc } from './docs/doc.entity';
 import { Project } from './projects/project.entity';
 import { User } from './users/user.entity';
@@ -17,6 +18,6 @@ export default new DataSource({
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   charset: 'utf8mb4_unicode_ci',
-  entities: [User, Project, Doc, Annotation, Conversation, Message, Usage],
+  entities: [User, Project, Doc, Annotation, Conversation, Message, Usage, Comment, CommentBlock],
   migrations: [__dirname + '/migrations/*.js'],
 });

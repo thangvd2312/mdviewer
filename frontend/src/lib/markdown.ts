@@ -11,6 +11,17 @@ export function startsWithH1(markdown: string) {
   return /^#\s/.test(body) || /^[^\n]+\n=+\s*(\n|$)/.test(body)
 }
 
+/**
+ * Splits off the document's own leading title (`# Title` or a `===` underlined one), so a page can
+ * put something between the title and the body (e.g. the author line). `title` is null if none.
+ */
+export function splitLeadingTitle(markdown: string): { title: string | null; body: string } {
+  const text = stripFrontmatter(markdown).replace(/^\s+/, '')
+  const m = text.match(/^#[ \t]+(.+?)[ \t]*#*[ \t]*(?:\n|$)/) ?? text.match(/^([^\n]+)\n=+[ \t]*(?:\n|$)/)
+  if (!m) return { title: null, body: markdown }
+  return { title: m[1]!.replace(/[*_`]/g, '').trim(), body: text.slice(m[0].length) }
+}
+
 export function stripFrontmatter(markdown: string) {
   return markdown.replace(/^---\n[\s\S]*?\n---\n/, '')
 }
@@ -27,7 +38,12 @@ export function downloadMarkdown(filename: string, content: string) {
 export function deriveTitle(markdown: string) {
   const body = stripFrontmatter(markdown)
   const heading = body.match(/^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/m)
-  const line = heading?.[1] ?? body.split('\n').find((l) => l.trim())?.trim()
+  const line =
+    heading?.[1] ??
+    body
+      .split('\n')
+      .find((l) => l.trim())
+      ?.trim()
   const title = (line ?? '')
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/<[^>]+>/g, '')

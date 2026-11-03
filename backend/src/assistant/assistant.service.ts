@@ -1,17 +1,21 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import type { Response } from 'express';
-import OpenAI from 'openai';
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
-import { AnnotationsService } from '../annotations/annotations.service';
-import { DocsService } from '../docs/docs.service';
-import { extractSection, outline } from '../docs/markdown.util';
-import { ProjectsService } from '../projects/projects.service';
-import { AssistantContextDto, ChatDto } from './assistant.dto';
-import type { Message, MessageStatus } from './conversation.entity';
-import { ConversationsService } from './conversations.service';
-import { QuotaService } from './quota.service';
-import type { Tier } from './usage.entity';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import type { Response } from "express";
+import OpenAI from "openai";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import { AnnotationsService } from "../annotations/annotations.service";
+import { DocsService } from "../docs/docs.service";
+import { extractSection, outline } from "../docs/markdown.util";
+import { ProjectsService } from "../projects/projects.service";
+import { AssistantContextDto, ChatDto } from "./assistant.dto";
+import type { Message, MessageStatus } from "./conversation.entity";
+import { ConversationsService } from "./conversations.service";
+import { QuotaService } from "./quota.service";
+import type { Tier } from "./usage.entity";
 
 /** Documents longer than this are sent as their outline plus the section being read. */
 const DOC_MAX_CHARS = 60_000;
@@ -38,10 +42,10 @@ Scope: you only help with the user's documents, notes and projects, and with the
 /** SSE events sent to the browser. */
 type StreamEvent =
   /** First event: the conversation the question and answer are stored in. */
-  | { type: 'conversation'; id: string; tier: Tier }
-  | { type: 'text'; text: string }
-  | { type: 'done'; stopReason: string | null }
-  | { type: 'error'; message: string };
+  | { type: "conversation"; id: string; tier: Tier }
+  | { type: "text"; text: string }
+  | { type: "done"; stopReason: string | null }
+  | { type: "error"; message: string };
 
 @Injectable()
 export class AssistantService {
@@ -50,7 +54,10 @@ export class AssistantService {
   private readonly client: OpenAI | null;
   /** Answers longer than this are cut off (the router ignores max_completion_tokens). */
   private readonly maxAnswerChars: number;
-  private readonly suggestCache = new Map<string, { at: number; questions: string[] }>();
+  private readonly suggestCache = new Map<
+    string,
+    { at: number; questions: string[] }
+  >();
 
   constructor(
     config: ConfigService,
@@ -60,11 +67,17 @@ export class AssistantService {
     private readonly conversations: ConversationsService,
     private readonly quota: QuotaService,
   ) {
-    const apiKey = config.get<string>('ASSISTANT_API_KEY');
+    const apiKey = config.get<string>("ASSISTANT_API_KEY");
     this.client = apiKey
-      ? new OpenAI({ apiKey, baseURL: config.get<string>('ASSISTANT_BASE_URL') || undefined, maxRetries: 2, timeout: 180_000 })
+      ? new OpenAI({
+          apiKey,
+          baseURL: config.get<string>("ASSISTANT_BASE_URL") || undefined,
+          maxRetries: 2,
+          timeout: 180_000,
+        })
       : null;
-    this.maxAnswerChars = Number(config.get('ASSISTANT_MAX_ANSWER_CHARS', 12_000)) || 12_000;
+    this.maxAnswerChars =
+      Number(config.get("ASSISTANT_MAX_ANSWER_CHARS", 12_000)) || 12_000;
   }
 
   async status(ownerId: string) {
@@ -88,7 +101,9 @@ export class AssistantService {
     // Runs once: before the stream ends (so an immediate next question isn't refused), or on an early error.
     let settled: Promise<void> | null = null;
     const settle = () =>
-      (settled ??= this.quota.settle(record, tokens, used.model).finally(release)); // nothing answered (error) = not counted
+      (settled ??= this.quota
+        .settle(record, tokens, used.model)
+        .finally(release)); // nothing answered (error) = not counted
     try {
       const { context, message } = dto;
       const conversation = dto.conversationId
@@ -97,23 +112,27 @@ export class AssistantService {
       await this.conversations.addQuestion(conversation, message, dto.retry);
       const history = await this.conversations.history(conversation.id);
       const system = await this.buildSystem(ownerId, context);
-      const messages: ChatCompletionMessageParam[] = [{ role: 'system', content: system }, ...history.map(toMessageParam)];
+      const messages: ChatCompletionMessageParam[] = [
+        { role: "system", content: system },
+        ...history.map(toMessageParam),
+      ];
 
       res.status(200);
-      res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-      res.setHeader('Cache-Control', 'no-cache, no-transform');
-      res.setHeader('X-Accel-Buffering', 'no');
+      res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("X-Accel-Buffering", "no");
       res.flushHeaders();
-      const send = (event: StreamEvent) => res.write(`data: ${JSON.stringify(event)}\n\n`);
-      send({ type: 'conversation', id: conversation.id, tier: plan.tier });
+      const send = (event: StreamEvent) =>
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      send({ type: "conversation", id: conversation.id, tier: plan.tier });
 
       const abort = new AbortController();
-      res.on('close', () => {
+      res.on("close", () => {
         if (!res.writableEnded) abort.abort();
       });
 
-      let answer = '';
-      let status: MessageStatus = 'complete';
+      let answer = "";
+      let status: MessageStatus = "complete";
       let truncated = false;
       try {
         // Try the plan's model, then the fallbacks — but only while nothing has been shown yet.
@@ -128,7 +147,7 @@ export class AssistantService {
           const emit = (text: string) => {
             if (!text) return;
             answer += text;
-            send({ type: 'text', text });
+            send({ type: "text", text });
             if (answer.length > this.maxAnswerChars) {
               truncated = true;
               abort.abort();
@@ -147,7 +166,11 @@ export class AssistantService {
               { signal: abort.signal, maxRetries: last ? 2 : 0 },
             );
             for await (const chunk of stream) {
-              if (chunk.usage) tokens = { prompt: chunk.usage.prompt_tokens, completion: chunk.usage.completion_tokens };
+              if (chunk.usage)
+                tokens = {
+                  prompt: chunk.usage.prompt_tokens,
+                  completion: chunk.usage.completion_tokens,
+                };
               const choice = chunk.choices[0];
               if (!choice) continue;
               const text = choice.delta?.content || choice.delta?.refusal;
@@ -158,44 +181,56 @@ export class AssistantService {
             if (!truncated) emit(think.end());
           } catch (error) {
             if (abort.signal.aborted || answer || last) throw error;
-            this.logger.warn(`${attempt.model} failed (${describe(error)}); trying ${attempts[i + 1]!.model}`);
+            this.logger.warn(
+              `${attempt.model} failed (${describe(error)}); trying ${attempts[i + 1]!.model}`,
+            );
             continue;
           }
           if (answer.trim() || abort.signal.aborted || last) break;
-          this.logger.warn(`${attempt.model} returned an empty answer; trying ${attempts[i + 1]!.model}`);
+          this.logger.warn(
+            `${attempt.model} returned an empty answer; trying ${attempts[i + 1]!.model}`,
+          );
         }
         if (truncated) {
-          status = 'truncated';
-          send({ type: 'done', stopReason: 'length' });
+          status = "truncated";
+          send({ type: "done", stopReason: "length" });
         } else if (abort.signal.aborted) {
-          status = 'stopped'; // the stream ends quietly when aborted
-        } else if (finish === 'content_filter') {
-          status = 'error';
-          send({ type: 'error', message: 'The assistant declined to answer this request.' });
+          status = "stopped"; // the stream ends quietly when aborted
+        } else if (finish === "content_filter") {
+          status = "error";
+          send({
+            type: "error",
+            message: "The assistant declined to answer this request.",
+          });
         } else {
-          send({ type: 'done', stopReason: finish });
+          send({ type: "done", stopReason: finish });
         }
       } catch (error) {
         if (truncated) {
-          status = 'truncated';
-          send({ type: 'done', stopReason: 'length' });
+          status = "truncated";
+          send({ type: "done", stopReason: "length" });
         } else if (abort.signal.aborted) {
-          status = 'stopped'; // the user pressed Stop or left
+          status = "stopped"; // the user pressed Stop or left
         } else {
-          status = 'error';
+          status = "error";
           this.logger.error(`chat failed: ${describe(error)}`);
-          send({ type: 'error', message: userMessage(error) });
+          send({ type: "error", message: userMessage(error) });
         }
       } finally {
         // A stopped or cut-off stream doesn't report usage: estimate it (the model did the work).
-        if (!tokens && (answer || status !== 'error')) {
-          tokens = { prompt: estimateTokens(messages), completion: Math.ceil(answer.length / 3) };
+        if (!tokens && (answer || status !== "error")) {
+          tokens = {
+            prompt: estimateTokens(messages),
+            completion: Math.ceil(answer.length / 3),
+          };
         }
         // Store before ending the stream, so the answer is there as soon as the client sees the end.
         if (answer.trim()) {
           await this.conversations
             .addAnswer(conversation, answer, status, used)
-            .catch((e: unknown) => this.logger.error(`saving answer failed: ${describe(e)}`));
+            .catch((e: unknown) =>
+              this.logger.error(`saving answer failed: ${describe(e)}`),
+            );
         }
         await settle();
         res.end();
@@ -206,21 +241,34 @@ export class AssistantService {
   }
 
   /** A few short questions the user might want to ask about what they're looking at. */
-  async suggest(ownerId: string, context: AssistantContextDto, selection?: string): Promise<{ questions: string[] }> {
+  async suggest(
+    ownerId: string,
+    context: AssistantContextDto,
+    selection?: string,
+  ): Promise<{ questions: string[] }> {
     const client = this.requireClient();
-    const key = JSON.stringify([ownerId, context.page, context.docId, context.projectId, context.sectionTitle, selection]);
+    const key = JSON.stringify([
+      ownerId,
+      context.page,
+      context.docId,
+      context.projectId,
+      context.sectionTitle,
+      selection,
+    ]);
     const cached = this.suggestCache.get(key);
-    if (cached && Date.now() - cached.at < SUGGEST_TTL_MS) return { questions: cached.questions };
+    if (cached && Date.now() - cached.at < SUGGEST_TTL_MS)
+      return { questions: cached.questions };
 
     const plan = await this.quota.suggestPlan(ownerId);
     // Over a limit: the panel falls back to its built-in starter questions.
     if (!plan) return { questions: [] };
     const system = await this.buildSystem(ownerId, context);
 
-    let focus = 'the material above as a whole';
-    if (selection) focus = `this passage the user selected:\n"""${selection}"""`;
-    else if (context.page === 'doc' && context.sectionTitle) {
-      const doc = await this.docs.findOwned(ownerId, context.docId!);
+    let focus = "the material above as a whole";
+    if (selection)
+      focus = `this passage the user selected:\n"""${selection}"""`;
+    else if (context.page === "doc" && context.sectionTitle) {
+      const doc = await this.docs.findReadable(ownerId, context.docId!);
       const section = extractSection(doc.content, context.sectionTitle);
       focus = section
         ? `the section the user is reading right now:\n"""${section.slice(0, 6000)}"""`
@@ -228,9 +276,9 @@ export class AssistantService {
     }
 
     const messages: ChatCompletionMessageParam[] = [
-      { role: 'system', content: system },
+      { role: "system", content: system },
       {
-        role: 'user',
+        role: "user",
         content: `Suggest 4 questions I could ask you about ${focus}
 
 Make them specific to the content (not generic like "summarize this"), varied (understanding, recall, applying it, connections), and under 90 characters each. Write them in Vietnamese, even if the content is in English (keep code identifiers and technical terms as they are).
@@ -243,7 +291,7 @@ Reply with only a JSON object, no code fence: {"questions": ["…", "…", "…"
       try {
         const response = await client.chat.completions.create(
           // Suggestions should appear quickly; they don't need deep reasoning.
-          { model: attempt.model, reasoning_effort: 'low', messages },
+          { model: attempt.model, reasoning_effort: "low", messages },
           { maxRetries: 0 },
         );
         const { usage } = response;
@@ -251,12 +299,17 @@ Reply with only a JSON object, no code fence: {"questions": ["…", "…", "…"
           prompt: usage?.prompt_tokens ?? 0,
           completion: usage?.completion_tokens ?? 0,
         });
-        const text = (response.choices[0]?.message?.content ?? '').replace(/^\s*<think>[\s\S]*?<\/think>/, '');
+        const text = (response.choices[0]?.message?.content ?? "").replace(
+          /^\s*<think>[\s\S]*?<\/think>/,
+          "",
+        );
         const questions = parseQuestions(text);
         if (questions.length) this.cacheSuggestions(key, questions);
         return { questions };
       } catch (error) {
-        this.logger.warn(`suggest with ${attempt.model} failed: ${describe(error)}`);
+        this.logger.warn(
+          `suggest with ${attempt.model} failed: ${describe(error)}`,
+        );
       }
     }
     return { questions: [] };
@@ -265,7 +318,8 @@ Reply with only a JSON object, no code fence: {"questions": ["…", "…", "…"
   private cacheSuggestions(key: string, questions: string[]) {
     const now = Date.now();
     if (this.suggestCache.size >= 500) {
-      for (const [k, v] of this.suggestCache) if (now - v.at >= SUGGEST_TTL_MS) this.suggestCache.delete(k);
+      for (const [k, v] of this.suggestCache)
+        if (now - v.at >= SUGGEST_TTL_MS) this.suggestCache.delete(k);
       // Still full: drop the oldest entries (Map keeps insertion order).
       for (const k of this.suggestCache.keys()) {
         if (this.suggestCache.size < 500) break;
@@ -276,7 +330,10 @@ Reply with only a JSON object, no code fence: {"questions": ["…", "…", "…"
   }
 
   private requireClient() {
-    if (!this.client) throw new ServiceUnavailableException('The assistant is not configured (set ASSISTANT_API_KEY on the server).');
+    if (!this.client)
+      throw new ServiceUnavailableException(
+        "The assistant is not configured (set ASSISTANT_API_KEY on the server).",
+      );
     return this.client;
   }
 
@@ -285,21 +342,35 @@ Reply with only a JSON object, no code fence: {"questions": ["…", "…", "…"
    * stays identical across turns and the provider's prompt cache can reuse it. Notes go after
    * the document because they change more often.
    */
-  private async buildSystem(ownerId: string, ctx: AssistantContextDto): Promise<string> {
+  private async buildSystem(
+    ownerId: string,
+    ctx: AssistantContextDto,
+  ): Promise<string> {
     const blocks: string[] = [INSTRUCTIONS];
 
-    if (ctx.page === 'doc' && ctx.docId) {
-      const doc = await this.docs.findOwned(ownerId, ctx.docId);
-      const project = doc.projectId ? await this.projects.get(ownerId, doc.projectId).catch(() => null) : null;
-      const where = `The user is reading this document${project ? ` from the project "${project.name}"` : ''}`;
+    if (ctx.page === "doc" && ctx.docId) {
+      // Their own document, or someone else's public one (then without the author's notes or project).
+      const doc = await this.docs.findReadable(ownerId, ctx.docId);
+      const own = doc.ownerId === ownerId;
+      const project =
+        own && doc.projectId
+          ? await this.projects.get(ownerId, doc.projectId).catch(() => null)
+          : null;
+      const where = own
+        ? `The user is reading this document${project ? ` from the project "${project.name}"` : ""}`
+        : "The user is reading this public document, written and shared by another person";
       if (doc.content.length <= DOC_MAX_CHARS) {
-        blocks.push(`${where}:\n\n<document title=${JSON.stringify(doc.title)}>\n${doc.content}\n</document>`);
+        blocks.push(
+          `${where}:\n\n<document title=${JSON.stringify(doc.title)}>\n${doc.content}\n</document>`,
+        );
       } else {
         // Long document: its outline plus the part being read, to keep each question affordable.
-        const section = ctx.sectionTitle ? extractSection(doc.content, ctx.sectionTitle) : null;
+        const section = ctx.sectionTitle
+          ? extractSection(doc.content, ctx.sectionTitle)
+          : null;
         const part = section ?? doc.content;
         blocks.push(
-          `${where}. It is long (${doc.content.length.toLocaleString('en')} characters), so only its outline and ${section ? 'the section being read' : 'its beginning'} are included here. If a question is about a part that isn't included, say which section (from the outline) covers it and suggest opening that section, rather than guessing.
+          `${where}. It is long (${doc.content.length.toLocaleString("en")} characters), so only its outline and ${section ? "the section being read" : "its beginning"} are included here. If a question is about a part that isn't included, say which section (from the outline) covers it and suggest opening that section, rather than guessing.
 
 <document_outline title=${JSON.stringify(doc.title)}>
 ${clip(outline(doc.content), 8000)}
@@ -310,36 +381,54 @@ ${clip(part, DOC_MAX_CHARS)}
 </document_part>`,
         );
       }
-      const notes = await this.annotations.listForDoc(ownerId, doc.id);
+      const notes = own
+        ? await this.annotations.listForDoc(ownerId, doc.id)
+        : [];
       if (notes.length > 0) {
         const list = notes
-          .map((n) => `- [${n.kind}] on "${clip(n.quote, 300)}"${n.body.trim() ? `: ${clip(n.body, 1000)}` : ' (highlight only)'}`)
-          .join('\n');
-        blocks.push(`Sticky notes the user pinned on this document:\n<notes>\n${clip(list, NOTES_MAX_CHARS)}\n</notes>`);
+          .map(
+            (n) =>
+              `- [${n.kind}] on "${clip(n.quote, 300)}"${n.body.trim() ? `: ${clip(n.body, 1000)}` : " (highlight only)"}`,
+          )
+          .join("\n");
+        blocks.push(
+          `Sticky notes the user pinned on this document:\n<notes>\n${clip(list, NOTES_MAX_CHARS)}\n</notes>`,
+        );
       }
-    } else if (ctx.page === 'project' && ctx.projectId) {
+    } else if (ctx.page === "project" && ctx.projectId) {
       const project = await this.projects.get(ownerId, ctx.projectId);
-      const docs = await this.docs.list(ownerId, { projectId: project.id, sort: 'title', limit: 200 });
+      const docs = await this.docs.list(ownerId, {
+        projectId: project.id,
+        sort: "title",
+        limit: 200,
+      });
       blocks.push(
-        `The user is looking at the project "${project.name}"${project.description ? ` (${project.description})` : ''}. Its documents (title — excerpt):\n${listDocs(docs)}`,
+        `The user is looking at the project "${project.name}"${project.description ? ` (${project.description})` : ""}. Its documents (title — excerpt):\n${listDocs(docs)}`,
       );
     } else {
-      const docs = await this.docs.list(ownerId, { sort: 'recent', limit: 40 });
-      blocks.push(`The user is on the home screen. Their most recently opened documents (title — excerpt):\n${listDocs(docs)}`);
+      const docs = await this.docs.list(ownerId, { sort: "recent", limit: 40 });
+      blocks.push(
+        `The user is on the home screen. Their most recently opened documents (title — excerpt):\n${listDocs(docs)}`,
+      );
     }
-    return blocks.join('\n\n');
+    return blocks.join("\n\n");
   }
 }
 
 /** User turns carry the reading context they were asked in; it is rendered the same way every time so the history stays cacheable. */
-function toMessageParam(turn: Pick<Message, 'role' | 'content' | 'quote' | 'section'>): ChatCompletionMessageParam {
-  if (turn.role === 'assistant') return { role: 'assistant', content: turn.content };
+function toMessageParam(
+  turn: Pick<Message, "role" | "content" | "quote" | "section">,
+): ChatCompletionMessageParam {
+  if (turn.role === "assistant")
+    return { role: "assistant", content: turn.content };
   const lines = [
     turn.section && `Section being read: ${turn.section}`,
     turn.quote && `Selected passage:\n"""${turn.quote}"""`,
   ].filter(Boolean);
-  const content = lines.length ? `<reading_context>\n${lines.join('\n')}\n</reading_context>\n\n${turn.content}` : turn.content;
-  return { role: 'user', content };
+  const content = lines.length
+    ? `<reading_context>\n${lines.join("\n")}\n</reading_context>\n\n${turn.content}`
+    : turn.content;
+  return { role: "user", content };
 }
 
 /**
@@ -347,47 +436,60 @@ function toMessageParam(turn: Pick<Message, 'role' | 'content' | 'quote' | 'sect
  * reasoning in the answer itself. Text is held back only until it's clear whether one starts.
  */
 class ThinkFilter {
-  private buffer = '';
-  private state: 'start' | 'think' | 'pass' = 'start';
+  private buffer = "";
+  private state: "start" | "think" | "pass" = "start";
 
   push(text: string): string {
-    if (this.state === 'pass') return text;
+    if (this.state === "pass") return text;
     this.buffer += text;
-    if (this.state === 'start') {
+    if (this.state === "start") {
       const head = this.buffer.trimStart();
-      if (head.length < '<think>'.length && '<think>'.startsWith(head)) return ''; // can't tell yet
-      if (!head.startsWith('<think>')) {
-        this.state = 'pass';
+      if (head.length < "<think>".length && "<think>".startsWith(head))
+        return ""; // can't tell yet
+      if (!head.startsWith("<think>")) {
+        this.state = "pass";
         const out = this.buffer;
-        this.buffer = '';
+        this.buffer = "";
         return out;
       }
-      this.state = 'think';
+      this.state = "think";
     }
-    const end = this.buffer.indexOf('</think>');
-    if (end < 0) return '';
-    const rest = this.buffer.slice(end + '</think>'.length).trimStart();
-    this.buffer = '';
-    this.state = 'pass';
+    const end = this.buffer.indexOf("</think>");
+    if (end < 0) return "";
+    const rest = this.buffer.slice(end + "</think>".length).trimStart();
+    this.buffer = "";
+    this.state = "pass";
     return rest;
   }
 
   /** At the end of the stream: text still held back (an unfinished think block is dropped). */
   end(): string {
-    const out = this.state === 'start' ? this.buffer : '';
-    this.buffer = '';
+    const out = this.state === "start" ? this.buffer : "";
+    this.buffer = "";
     return out;
   }
 }
 
 /** Rough token count for when the service doesn't report usage (≈3 characters a token for mixed Vietnamese/English). */
 const estimateTokens = (messages: ChatCompletionMessageParam[]) =>
-  Math.ceil(messages.reduce((n, m) => n + (typeof m.content === 'string' ? m.content.length : 0), 0) / 3);
+  Math.ceil(
+    messages.reduce(
+      (n, m) => n + (typeof m.content === "string" ? m.content.length : 0),
+      0,
+    ) / 3,
+  );
 
-const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+const clip = (s: string, n: number) =>
+  s.length > n ? s.slice(0, n - 1) + "…" : s;
 
 const listDocs = (docs: { title: string; excerpt: string }[]) =>
-  docs.length ? docs.map((d) => `- ${d.title}${d.excerpt ? ` — ${clip(d.excerpt, 160)}` : ''}`).join('\n') : '(none yet)';
+  docs.length
+    ? docs
+        .map(
+          (d) => `- ${d.title}${d.excerpt ? ` — ${clip(d.excerpt, 160)}` : ""}`,
+        )
+        .join("\n")
+    : "(none yet)";
 
 /** Pull the question list out of the reply: a JSON object (possibly fenced), or failing that one question per line. */
 function parseQuestions(text: string): string[] {
@@ -402,24 +504,33 @@ function parseQuestions(text: string): string[] {
   }
   if (!Array.isArray(list)) {
     list = text
-      .split('\n')
-      .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, '').trim())
-      .filter((l) => l.endsWith('?'));
+      .split("\n")
+      .map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim())
+      .filter((l) => l.endsWith("?"));
   }
   return (list as unknown[])
-    .filter((q): q is string => typeof q === 'string' && q.trim() !== '')
+    .filter((q): q is string => typeof q === "string" && q.trim() !== "")
     .map((q) => q.trim())
     .slice(0, 5);
 }
 
 function userMessage(error: unknown) {
-  if (error instanceof OpenAI.RateLimitError) return 'The assistant is busy right now — try again in a moment.';
-  if (error instanceof OpenAI.AuthenticationError) return 'The assistant’s API key is invalid.';
-  if (error instanceof OpenAI.BadRequestError) return 'The request was too large or invalid (very long document?).';
-  if (error instanceof OpenAI.APIConnectionError) return 'Could not reach the assistant service.';
-  if (error instanceof OpenAI.APIError) return 'The assistant service had a problem — try again.';
-  return 'Could not reach the assistant service.';
+  if (error instanceof OpenAI.RateLimitError)
+    return "The assistant is busy right now — try again in a moment.";
+  if (error instanceof OpenAI.AuthenticationError)
+    return "The assistant’s API key is invalid.";
+  if (error instanceof OpenAI.BadRequestError)
+    return "The request was too large or invalid (very long document?).";
+  if (error instanceof OpenAI.APIConnectionError)
+    return "Could not reach the assistant service.";
+  if (error instanceof OpenAI.APIError)
+    return "The assistant service had a problem — try again.";
+  return "Could not reach the assistant service.";
 }
 
 const describe = (error: unknown) =>
-  error instanceof OpenAI.APIError ? `${error.status} ${error.message}` : error instanceof Error ? error.message : String(error);
+  error instanceof OpenAI.APIError
+    ? `${error.status} ${error.message}`
+    : error instanceof Error
+      ? error.message
+      : String(error);
