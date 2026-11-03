@@ -261,6 +261,9 @@ export const AnnotatedContent = memo(function AnnotatedContent({
   const ask = () => {
     const pending = selectionRef.current
     if (!pending) return
+    // The passage goes with the question; drop the selection so it doesn't linger behind the assistant
+    // (on phones iOS keeps drawing it, with its menu, over the assistant sheet).
+    getSelection()?.removeAllRanges()
     setSelection(null)
     onAsk(pending.anchor.quote.slice(0, QUOTE_MAX))
   }

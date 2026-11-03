@@ -102,6 +102,15 @@ function AssistantPanel({ side, onClose }: { side: Side; onClose: () => void }) 
   const tailored = suggestions.data?.questions ?? []
   const questions = tailored.length > 0 ? tailored : starterQuestions(page, quote)
 
+  // Phones: the sheet covers the page, so a text selection left on the page would only show through
+  // (iOS draws it and its menu above the sheet, and the sticky-note toolbar would reappear).
+  const sectionRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (!mobile) return
+    const sel = getSelection()
+    if (sel && !sel.isCollapsed && !sectionRef.current?.contains(sel.anchorNode)) sel.removeAllRanges()
+  }, [mobile])
+
   // Don't pop up the on-screen keyboard over the suggestions on touch screens.
   useEffect(() => {
     if (!isTouch()) inputRef.current?.focus()
@@ -144,6 +153,7 @@ function AssistantPanel({ side, onClose }: { side: Side; onClose: () => void }) 
         <div aria-hidden className="animate-fade fixed inset-0 z-40 bg-black/30 dark:bg-black/50" onClick={onClose} />
       )}
       <section
+        ref={sectionRef}
         aria-label="Assistant"
         className={clsx(
           'fixed z-40 flex flex-col overflow-hidden border-line bg-surface shadow-[0_24px_60px_rgba(0,0,0,0.18),0_4px_14px_rgba(0,0,0,0.08)]',
