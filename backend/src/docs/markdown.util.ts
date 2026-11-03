@@ -60,3 +60,16 @@ export function extractSection(markdown: string, title: string): string | null {
   }
   return start >= 0 ? lines.slice(start).join('\n').trim() : null;
 }
+
+/** The document's headings as an indented list (fenced code skipped), for giving an overview of a long document. */
+export function outline(markdown: string): string {
+  const out: string[] = [];
+  let inFence = false;
+  for (const line of markdown.split('\n')) {
+    if (/^\s{0,3}(```|~~~)/.test(line)) inFence = !inFence;
+    if (inFence) continue;
+    const m = line.match(/^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
+    if (m) out.push(`${'  '.repeat(m[1]!.length - 1)}- ${toPlainText(m[2]!)}`);
+  }
+  return out.join('\n');
+}

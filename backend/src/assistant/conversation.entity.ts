@@ -3,6 +3,7 @@ import { Doc } from '../docs/doc.entity';
 import { Project } from '../projects/project.entity';
 import { User } from '../users/user.entity';
 import type { AssistantPage } from './assistant.dto';
+import type { Tier } from './usage.entity';
 
 /**
  * One chat with the assistant. Kept permanently (also after "New chat") so the questions a user
@@ -52,7 +53,7 @@ export class Conversation {
   updatedAt: Date;
 }
 
-export const MESSAGE_STATUSES = ['complete', 'stopped', 'error'] as const;
+export const MESSAGE_STATUSES = ['complete', 'stopped', 'truncated', 'error'] as const;
 export type MessageStatus = (typeof MESSAGE_STATUSES)[number];
 
 /** A question or an answer in a conversation. */
@@ -92,13 +93,17 @@ export class Message {
   @Column({ type: 'varchar', length: 300, nullable: true })
   section: string | null;
 
-  /** Answers only: whether it finished, was stopped by the user, or broke off with an error. */
+  /** Answers only: finished, stopped by the user, cut off for being too long, or broke off with an error. */
   @Column({ type: 'varchar', length: 16, nullable: true })
   status: MessageStatus | null;
 
   /** Answers only: the model that wrote it. */
   @Column({ type: 'varchar', length: 100, nullable: true })
   model: string | null;
+
+  /** Answers only: written by the main model (full) or the cheaper one (saver). */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  tier: Tier | null;
 
   @Column({ type: 'datetime', precision: 3 })
   createdAt: Date;

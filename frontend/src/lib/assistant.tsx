@@ -1,5 +1,25 @@
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { api, ApiError, type AssistantContext, type ChatRequest, type ChatTurn, type ConversationQuery } from './api'
+import { useQueryClient } from '@tanstack/react-query'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
+import {
+  api,
+  ApiError,
+  type AssistantContext,
+  type ChatRequest,
+  type ChatTurn,
+  type ConversationQuery,
+  type Tier,
+} from './api'
+import { keys } from './queries'
 
 /** What the user is looking at, as published by the current page. */
 export interface PageInfo {
@@ -12,6 +32,8 @@ export interface Thread {
   turns: ChatTurn[]
   streaming: boolean
   error?: string
+  /** False when asking again right away can't help (e.g. today's allowance is used up). */
+  retryable?: boolean
   /** The stored conversation this thread continues (none yet = the next question starts one). */
   conversationId?: string
   /** Restoring the last conversation from the server. */
@@ -67,6 +89,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [threads, setThreads] = useState<Record<string, Thread>>({})
   const [focusSignal, setFocusSignal] = useState(0)
   const controllers = useRef(new Map<string, AbortController>())
+  const queryClient = useQueryClient()
   // Latest values for callbacks that must stay stable.
   const pageRef = useRef(page)
   const threadsRef = useRef(threads)
@@ -98,18 +121,25 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
       // Batch token updates to one render per frame.
       let text = ''
+      let tier: Tier | undefined
+      let status: ChatTurn['status']
       let frame = 0
+      const answer = (): ChatTurn => ({ role: 'assistant', content: text, tier, status })
       const flush = () => {
         frame = 0
-        patch(k, (t) => ({ ...t, turns: [...t.turns.slice(0, -1), { role: 'assistant', content: text }] }))
+        patch(k, (t) => ({ ...t, turns: [...t.turns.slice(0, -1), answer()] }))
       }
       let error: string | undefined
+      let retryable = true
       try {
         await api.assistant.chat(
           body,
           (e) => {
-            if (e.type === 'conversation') patch(k, (t) => ({ ...t, conversationId: e.id }))
-            else if (e.type === 'text') text += e.text
+            if (e.type === 'conversation') {
+              tier = e.tier
+              patch(k, (t) => ({ ...t, conversationId: e.id }))
+            } else if (e.type === 'text') text += e.text
+            else if (e.type === 'done' && e.stopReason === 'length') status = 'truncated'
             else if (e.type === 'error') error = e.message
             if (!frame) frame = requestAnimationFrame(flush)
           },
@@ -117,22 +147,27 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         )
       } catch (e) {
         if (!controller.signal.aborted) error = e instanceof ApiError ? e.message : 'Could not reach the assistant.'
+        if (e instanceof ApiError && e.status === 429) retryable = false
       } finally {
         cancelAnimationFrame(frame)
         if (controllers.current.get(k) === controller) controllers.current.delete(k)
+        if (controller.signal.aborted && !status) status = 'stopped'
         patch(k, (t) => {
           const answered = text.trim() !== ''
           const rest = t.turns.slice(0, -1)
           return {
             ...t,
-            turns: answered ? [...rest, { role: 'assistant', content: text }] : rest,
+            turns: answered ? [...rest, answer()] : rest,
             streaming: false,
             error,
+            retryable,
           }
         })
+        // The question used up part of today's allowance.
+        void queryClient.invalidateQueries({ queryKey: keys.assistantStatus })
       }
     },
-    [patch],
+    [patch, queryClient],
   )
 
   const send = useCallback(
@@ -191,12 +226,13 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         !t.loading
           ? t
           : {
-              turns: conversation.messages.map(({ role, content, quote, section, status }) => ({
+              turns: conversation.messages.map(({ role, content, quote, section, status, tier }) => ({
                 role,
                 content,
                 quote,
                 section,
                 status,
+                tier,
               })),
               streaming: false,
               conversationId: conversation.id,
@@ -236,15 +272,12 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     sendRef.current = send
   })
 
-  const ask = useCallback<AssistantActions['ask']>(
-    (opts = {}) => {
-      setOpen(true)
-      if (opts.quote !== undefined) setQuote(opts.quote)
-      setFocusSignal((n) => n + 1)
-      if (opts.question) setTimeout(() => sendRef.current(opts.question!), 0)
-    },
-    [],
-  )
+  const ask = useCallback<AssistantActions['ask']>((opts = {}) => {
+    setOpen(true)
+    if (opts.quote !== undefined) setQuote(opts.quote)
+    setFocusSignal((n) => n + 1)
+    if (opts.question) setTimeout(() => sendRef.current(opts.question!), 0)
+  }, [])
   // ⌘J / Ctrl+J toggles the assistant.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

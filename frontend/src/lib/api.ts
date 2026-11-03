@@ -72,8 +72,31 @@ export interface ChatTurn {
   quote?: string | null
   /** Section being read when asking (user turns). */
   section?: string | null
-  /** Answers: 'stopped' when the user stopped it, 'error' when it broke off. */
-  status?: 'complete' | 'stopped' | 'error' | null
+  /** Answers: 'stopped' when the user stopped it, 'truncated' when cut off for length, 'error' when it broke off. */
+  status?: 'complete' | 'stopped' | 'truncated' | 'error' | null
+  /** Answers: written by the main model (full) or the cheaper one (saver). */
+  tier?: Tier | null
+}
+
+export type Tier = 'full' | 'saver'
+
+/** The user's assistant allowance for today. */
+export interface AssistantQuota {
+  /** No per-user allowance. */
+  unlimited: boolean
+  /** Model tier the next question gets; null = no questions left today. */
+  next: Tier | null
+  full: { used: number; limit: number }
+  saver: { used: number; limit: number }
+  blocked: 'user' | 'global' | null
+  /** When the allowance starts over (ISO). */
+  resetAt: string
+}
+
+export interface AssistantStatus {
+  enabled: boolean
+  model: string
+  quota: AssistantQuota | null
 }
 
 /** A stored chat with the assistant. */
@@ -103,7 +126,7 @@ export interface ChatRequest {
 }
 
 export type ChatStreamEvent =
-  | { type: 'conversation'; id: string }
+  | { type: 'conversation'; id: string; tier: Tier }
   | { type: 'text'; text: string }
   | { type: 'done'; stopReason: string | null }
   | { type: 'error'; message: string }
@@ -191,7 +214,7 @@ export const api = {
     remove: (id: string) => request<void>('DELETE', `/annotations/${id}`),
   },
   assistant: {
-    status: () => request<{ enabled: boolean; model: string }>('GET', '/assistant/status'),
+    status: () => request<AssistantStatus>('GET', '/assistant/status'),
     suggest: (context: AssistantContext, selection?: string) =>
       request<{ questions: string[] }>('POST', '/assistant/suggest', { context, selection }),
     conversations: (q: ConversationQuery) => {

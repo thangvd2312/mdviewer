@@ -5,9 +5,12 @@ import { DocsService } from '../docs/docs.service';
 import { ProjectsService } from '../projects/projects.service';
 import { AssistantContextDto, ConversationQueryDto } from './assistant.dto';
 import { Conversation, Message, MessageStatus } from './conversation.entity';
+import type { Tier } from './usage.entity';
 
-/** How many earlier messages are sent back to the model with each question. */
+/** At most this many earlier messages are sent back to the model with each question… */
 const HISTORY_LIMIT = 40;
+/** …and at most this much text: long chats keep their latest part. */
+const HISTORY_MAX_CHARS = 40_000;
 
 @Injectable()
 export class ConversationsService {
@@ -32,7 +35,7 @@ export class ConversationsService {
     const messages = await this.messages.find({
       where: { conversationId: id },
       order: { createdAt: 'ASC' },
-      select: { id: true, role: true, content: true, quote: true, section: true, status: true, createdAt: true },
+      select: { id: true, role: true, content: true, quote: true, section: true, status: true, tier: true, createdAt: true },
     });
     return { ...conversation, messages };
   }
@@ -83,8 +86,8 @@ export class ConversationsService {
     });
   }
 
-  async addAnswer(conversation: Conversation, content: string, status: MessageStatus, model: string) {
-    return this.save(conversation, { role: 'assistant', content, status, model });
+  async addAnswer(conversation: Conversation, content: string, status: MessageStatus, by: { model: string; tier: Tier }) {
+    return this.save(conversation, { role: 'assistant', content, status, model: by.model, tier: by.tier });
   }
 
   /** The conversation so far, oldest first, ending with the question being answered. */
@@ -94,7 +97,13 @@ export class ConversationsService {
       order: { createdAt: 'DESC' },
       take: HISTORY_LIMIT,
     });
-    const list = recent.reverse();
+    // Newest first: keep messages until the text budget is used (always the question itself).
+    let size = 0;
+    const kept = recent.filter((m, i) => {
+      size += m.content.length + (m.quote?.length ?? 0);
+      return i === 0 || size <= HISTORY_MAX_CHARS;
+    });
+    const list = kept.reverse();
     // Always start with a question.
     while (list.length && list[0]!.role !== 'user') list.shift();
     if (list.at(-1)?.role !== 'user') throw new BadRequestException('Nothing to answer');

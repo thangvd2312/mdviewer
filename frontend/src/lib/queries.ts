@@ -1,5 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, type Annotation, type AnnotationInput, type DocInput, type DocSummary, type Project, type ProjectInput } from './api'
+import {
+  api,
+  type Annotation,
+  type AnnotationInput,
+  type DocInput,
+  type DocSummary,
+  type Project,
+  type ProjectInput,
+} from './api'
 
 export const keys = {
   projects: ['projects'] as const,
@@ -91,7 +99,11 @@ export function useDeleteProject() {
 }
 
 export const useAnnotations = (docId: string | undefined) =>
-  useQuery({ queryKey: keys.annotations(docId ?? ''), enabled: Boolean(docId), queryFn: () => api.annotations.list(docId!) })
+  useQuery({
+    queryKey: keys.annotations(docId ?? ''),
+    enabled: Boolean(docId),
+    queryFn: () => api.annotations.list(docId!),
+  })
 
 /** Create / update / delete sticky notes of one document, keeping the cached list in sync. */
 export function useAnnotationMutations(docId: string) {
@@ -123,4 +135,5 @@ export function useAnnotationMutations(docId: string) {
 }
 
 export const useAssistantStatus = () =>
-  useQuery({ queryKey: keys.assistantStatus, queryFn: api.assistant.status, staleTime: Infinity })
+  // Carries today's allowance: refreshed after every question, and now and then (it resets at midnight).
+  useQuery({ queryKey: keys.assistantStatus, queryFn: api.assistant.status, staleTime: 60_000 })

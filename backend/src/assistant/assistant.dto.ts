@@ -40,7 +40,7 @@ export class AssistantContextDto {
 export class ChatQuestionDto {
   @IsString()
   @MinLength(1)
-  @MaxLength(20_000)
+  @MaxLength(4000)
   content: string;
 
   /** Passage the user had selected when asking. */

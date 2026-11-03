@@ -63,6 +63,8 @@ jobs:
         env:
           ASSISTANT_API_KEY: ${{ secrets.ASSISTANT_API_KEY }}
           ASSISTANT_BASE_URL: ${{ vars.ASSISTANT_BASE_URL || 'https://9router.tidesquare.vn/v1' }}
+          # GitHub logins / emails without a daily allowance (comma-separated).
+          ASSISTANT_UNLIMITED_USERS: ${{ vars.ASSISTANT_UNLIMITED_USERS || 'thangvd2312' }}
         run: |
           if [ -z "$ASSISTANT_API_KEY" ]; then echo "ASSISTANT_API_KEY secret not set; leaving .env as is"; exit 0; fi
           f="$APP_DIR/.env"
@@ -74,6 +76,7 @@ jobs:
           }
           upsert ASSISTANT_BASE_URL "$ASSISTANT_BASE_URL"
           upsert ASSISTANT_API_KEY "$ASSISTANT_API_KEY"
+          upsert ASSISTANT_UNLIMITED_USERS "$ASSISTANT_UNLIMITED_USERS"
           echo "assistant config written to .env"
 
       - name: Reload app (pm2) — migrations run on startup

@@ -8,7 +8,9 @@ import {
   FileText,
   Folder,
   History,
+  Hourglass,
   House,
+  Leaf,
   Quote,
   RotateCcw,
   Sparkles,
@@ -17,7 +19,7 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { api, type AssistantContext } from '../../lib/api'
+import { api, type AssistantContext, type AssistantQuota, type ChatTurn } from '../../lib/api'
 import { conversationQuery, useAssistant, useAssistantState, type PageInfo } from '../../lib/assistant'
 import { timeAgo } from '../../lib/format'
 import { useAssistantStatus } from '../../lib/queries'
@@ -79,7 +81,9 @@ function AssistantPanel({ side, onClose }: { side: Side; onClose: () => void }) 
   const touch = useMediaQuery(TOUCH_QUERY) || mobile
   const visible = useVisibleArea()
   const [view, setView] = useState<'chat' | 'history'>('chat')
-  const enabled = status?.enabled ?? true
+  const quota = status?.quota ?? null
+  const outOfQuestions = quota?.next === null
+  const enabled = (status?.enabled ?? true) && !outOfQuestions
   const [input, setInput] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -273,18 +277,13 @@ function AssistantPanel({ side, onClose }: { side: Side; onClose: () => void }) 
                     </div>
                   </div>
                 ) : (
-                  <AssistantMessage
-                    key={i}
-                    text={turn.content}
-                    stopped={turn.status === 'stopped'}
-                    streaming={thread.streaming && i === thread.turns.length - 1}
-                  />
+                  <AssistantMessage key={i} turn={turn} streaming={thread.streaming && i === thread.turns.length - 1} />
                 ),
               )}
               {thread.error && (
                 <div className="rounded-xl border border-danger/30 bg-danger/5 px-3 py-2 text-[13px] text-danger">
                   {thread.error}
-                  {thread.turns.at(-1)?.role === 'user' && (
+                  {thread.turns.at(-1)?.role === 'user' && thread.retryable !== false && (
                     <button
                       type="button"
                       onClick={retry}
@@ -300,7 +299,8 @@ function AssistantPanel({ side, onClose }: { side: Side; onClose: () => void }) 
         </div>
 
         <div className="shrink-0 border-t border-line p-2.5">
-          {!enabled && (
+          {outOfQuestions && quota && <OutOfQuestions quota={quota} />}
+          {status && !status.enabled && (
             <p className="mb-2 rounded-lg bg-raised px-3 py-2 text-[12.5px] text-ink-muted">
               The assistant isn’t set up yet. Add <code className="font-mono">ASSISTANT_API_KEY</code> to the server’s
               .env and restart it.
@@ -332,7 +332,7 @@ function AssistantPanel({ side, onClose }: { side: Side; onClose: () => void }) 
                 }
               }}
               rows={1}
-              maxLength={20_000}
+              maxLength={4000}
               disabled={!enabled}
               placeholder={quote ? 'Ask about this passage…' : 'Ask anything…'}
               enterKeyHint="send"
@@ -368,6 +368,7 @@ function AssistantPanel({ side, onClose }: { side: Side; onClose: () => void }) 
               </button>
             )}
           </div>
+          {quota && <QuotaLine quota={quota} />}
         </div>
       </section>
     </>
@@ -423,7 +424,53 @@ function PastChats({
   )
 }
 
-function AssistantMessage({ text, streaming, stopped }: { text: string; streaming: boolean; stopped?: boolean }) {
+const resetTime = (quota: AssistantQuota) =>
+  new Date(quota.resetAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+
+/** Shown instead of a working input when today's questions are used up. */
+function OutOfQuestions({ quota }: { quota: AssistantQuota }) {
+  return (
+    <div className="mb-2 flex items-start gap-2 rounded-lg border border-line bg-raised px-3 py-2 text-[12.5px] text-ink-muted">
+      <Hourglass className="mt-0.5 size-3.5 shrink-0" />
+      <span>
+        {quota.blocked === 'global'
+          ? 'The assistant has reached today’s limit for everyone.'
+          : 'You’ve used all of today’s questions.'}{' '}
+        Back at <span className="font-medium text-ink">{resetTime(quota)}</span>. Past chats are still here to read.
+      </span>
+    </div>
+  )
+}
+
+/** How much of today's allowance is left, under the input. */
+function QuotaLine({ quota }: { quota: AssistantQuota }) {
+  if (quota.next === null || (quota.next === 'full' && quota.unlimited)) return null
+  if (quota.next === 'full') {
+    const left = quota.full.limit - quota.full.used
+    return (
+      <p className={clsx('mt-1.5 px-1 text-[11.5px]', left <= 5 ? 'text-ink-muted' : 'text-ink-faint')}>
+        {left} of {quota.full.limit} questions left today
+        {left <= 5 && ' — then answers switch to saver mode'}
+      </p>
+    )
+  }
+  // Saver: either this user's full answers are used up, or it's a busy day for everyone.
+  const busy = quota.unlimited || quota.full.used < quota.full.limit
+  return (
+    <p
+      className="mt-1.5 flex items-center gap-1 px-1 text-[11.5px] text-ink-muted"
+      title="Answers come from a lighter, faster model: fine for most questions, less thorough on hard ones."
+    >
+      <Leaf className="size-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+      {busy
+        ? 'Saver mode — the assistant is busy today'
+        : `Saver mode · ${quota.saver.limit - quota.saver.used} questions left today`}
+    </p>
+  )
+}
+
+function AssistantMessage({ turn, streaming }: { turn: ChatTurn; streaming: boolean }) {
+  const text = turn.content
   const [copied, setCopied] = useState(false)
   if (!text && streaming) {
     return (
@@ -444,7 +491,19 @@ function AssistantMessage({ text, streaming, stopped }: { text: string; streamin
   return (
     <div className="group">
       <MarkdownView content={text} className="compact" />
-      {stopped && <p className="mt-1 text-[11.5px] text-ink-faint italic">Stopped</p>}
+      {(turn.status === 'stopped' || turn.status === 'truncated') && !streaming && (
+        <p className="mt-1 text-[11.5px] text-ink-faint italic">
+          {turn.status === 'stopped' ? 'Stopped' : 'Cut short — the answer got too long. Ask about a smaller part.'}
+        </p>
+      )}
+      {turn.tier === 'saver' && !streaming && (
+        <p
+          className="mt-1 flex items-center gap-1 text-[11.5px] text-ink-faint"
+          title="Answered by the lighter model (saver mode)."
+        >
+          <Leaf className="size-3" /> Saver
+        </p>
+      )}
       {!streaming && (
         <button
           type="button"
