@@ -83,10 +83,12 @@ export class AssistantService {
     const client = this.requireClient();
     const { plan, record, release } = await this.quota.admit(ownerId);
     let tokens: { prompt: number; completion: number } | null = null;
+    // The model that actually answers (a fallback when the plan's model fails).
+    let used = plan;
     // Runs once: before the stream ends (so an immediate next question isn't refused), or on an early error.
     let settled: Promise<void> | null = null;
     const settle = () =>
-      (settled ??= this.quota.settle(record, tokens).finally(release)); // nothing answered (error) = not counted
+      (settled ??= this.quota.settle(record, tokens, used.model).finally(release)); // nothing answered (error) = not counted
     try {
       const { context, message } = dto;
       const conversation = dto.conversationId
@@ -114,32 +116,53 @@ export class AssistantService {
       let status: MessageStatus = 'complete';
       let truncated = false;
       try {
-        const stream = await client.chat.completions.create(
-          {
-            model: plan.model,
-            stream: true,
-            stream_options: { include_usage: true },
-            reasoning_effort: plan.effort,
-            messages,
-          },
-          { signal: abort.signal },
-        );
+        // Try the plan's model, then the fallbacks — but only while nothing has been shown yet.
+        const attempts = this.quota.chain(plan);
         let finish: string | null = null;
-        for await (const chunk of stream) {
-          if (chunk.usage) tokens = { prompt: chunk.usage.prompt_tokens, completion: chunk.usage.completion_tokens };
-          const choice = chunk.choices[0];
-          if (!choice) continue;
-          const text = choice.delta?.content || choice.delta?.refusal;
-          if (text) {
+        for (const [i, attempt] of attempts.entries()) {
+          used = attempt;
+          const last = i === attempts.length - 1;
+          const think = new ThinkFilter();
+          tokens = null;
+          finish = null;
+          const emit = (text: string) => {
+            if (!text) return;
             answer += text;
             send({ type: 'text', text });
             if (answer.length > this.maxAnswerChars) {
               truncated = true;
               abort.abort();
-              break;
             }
+          };
+          try {
+            const stream = await client.chat.completions.create(
+              {
+                model: attempt.model,
+                stream: true,
+                stream_options: { include_usage: true },
+                reasoning_effort: attempt.effort,
+                messages,
+              },
+              // With fallbacks left, move on instead of waiting out retries.
+              { signal: abort.signal, maxRetries: last ? 2 : 0 },
+            );
+            for await (const chunk of stream) {
+              if (chunk.usage) tokens = { prompt: chunk.usage.prompt_tokens, completion: chunk.usage.completion_tokens };
+              const choice = chunk.choices[0];
+              if (!choice) continue;
+              const text = choice.delta?.content || choice.delta?.refusal;
+              if (text) emit(think.push(text));
+              if (truncated) break;
+              if (choice.finish_reason) finish = choice.finish_reason;
+            }
+            if (!truncated) emit(think.end());
+          } catch (error) {
+            if (abort.signal.aborted || answer || last) throw error;
+            this.logger.warn(`${attempt.model} failed (${describe(error)}); trying ${attempts[i + 1]!.model}`);
+            continue;
           }
-          if (choice.finish_reason) finish = choice.finish_reason;
+          if (answer.trim() || abort.signal.aborted || last) break;
+          this.logger.warn(`${attempt.model} returned an empty answer; trying ${attempts[i + 1]!.model}`);
         }
         if (truncated) {
           status = 'truncated';
@@ -171,7 +194,7 @@ export class AssistantService {
         // Store before ending the stream, so the answer is there as soon as the client sees the end.
         if (answer.trim()) {
           await this.conversations
-            .addAnswer(conversation, answer, status, plan)
+            .addAnswer(conversation, answer, status, used)
             .catch((e: unknown) => this.logger.error(`saving answer failed: ${describe(e)}`));
         }
         await settle();
@@ -204,35 +227,39 @@ export class AssistantService {
         : `the section "${context.sectionTitle}"`;
     }
 
-    try {
-      const response = await client.chat.completions.create({
-        model: plan.model,
-        // Suggestions should appear quickly; they don't need deep reasoning.
-        reasoning_effort: 'low',
-        messages: [
-          { role: 'system', content: system },
-          {
-            role: 'user',
-            content: `Suggest 4 questions I could ask you about ${focus}
+    const messages: ChatCompletionMessageParam[] = [
+      { role: 'system', content: system },
+      {
+        role: 'user',
+        content: `Suggest 4 questions I could ask you about ${focus}
 
 Make them specific to the content (not generic like "summarize this"), varied (understanding, recall, applying it, connections), and under 90 characters each. Write them in Vietnamese, even if the content is in English (keep code identifiers and technical terms as they are).
 
 Reply with only a JSON object, no code fence: {"questions": ["…", "…", "…", "…"]}`,
-          },
-        ],
-      });
-      const { usage } = response;
-      await this.quota.recordSuggest(ownerId, plan, {
-        prompt: usage?.prompt_tokens ?? 0,
-        completion: usage?.completion_tokens ?? 0,
-      });
-      const questions = parseQuestions(response.choices[0]?.message?.content ?? '');
-      if (questions.length) this.cacheSuggestions(key, questions);
-      return { questions };
-    } catch (error) {
-      this.logger.warn(`suggest failed: ${describe(error)}`);
-      return { questions: [] };
+      },
+    ];
+    // Suggestions are optional: try the cheap model and one fallback, then give up quietly.
+    for (const attempt of this.quota.chain(plan).slice(0, 2)) {
+      try {
+        const response = await client.chat.completions.create(
+          // Suggestions should appear quickly; they don't need deep reasoning.
+          { model: attempt.model, reasoning_effort: 'low', messages },
+          { maxRetries: 0 },
+        );
+        const { usage } = response;
+        await this.quota.recordSuggest(ownerId, attempt, {
+          prompt: usage?.prompt_tokens ?? 0,
+          completion: usage?.completion_tokens ?? 0,
+        });
+        const text = (response.choices[0]?.message?.content ?? '').replace(/^\s*<think>[\s\S]*?<\/think>/, '');
+        const questions = parseQuestions(text);
+        if (questions.length) this.cacheSuggestions(key, questions);
+        return { questions };
+      } catch (error) {
+        this.logger.warn(`suggest with ${attempt.model} failed: ${describe(error)}`);
+      }
     }
+    return { questions: [] };
   }
 
   private cacheSuggestions(key: string, questions: string[]) {
@@ -313,6 +340,44 @@ function toMessageParam(turn: Pick<Message, 'role' | 'content' | 'quote' | 'sect
   ].filter(Boolean);
   const content = lines.length ? `<reading_context>\n${lines.join('\n')}\n</reading_context>\n\n${turn.content}` : turn.content;
   return { role: 'user', content };
+}
+
+/**
+ * Drops a leading <think>…</think> block from streamed text: some models (e.g. MiniMax) put their
+ * reasoning in the answer itself. Text is held back only until it's clear whether one starts.
+ */
+class ThinkFilter {
+  private buffer = '';
+  private state: 'start' | 'think' | 'pass' = 'start';
+
+  push(text: string): string {
+    if (this.state === 'pass') return text;
+    this.buffer += text;
+    if (this.state === 'start') {
+      const head = this.buffer.trimStart();
+      if (head.length < '<think>'.length && '<think>'.startsWith(head)) return ''; // can't tell yet
+      if (!head.startsWith('<think>')) {
+        this.state = 'pass';
+        const out = this.buffer;
+        this.buffer = '';
+        return out;
+      }
+      this.state = 'think';
+    }
+    const end = this.buffer.indexOf('</think>');
+    if (end < 0) return '';
+    const rest = this.buffer.slice(end + '</think>'.length).trimStart();
+    this.buffer = '';
+    this.state = 'pass';
+    return rest;
+  }
+
+  /** At the end of the stream: text still held back (an unfinished think block is dropped). */
+  end(): string {
+    const out = this.state === 'start' ? this.buffer : '';
+    this.buffer = '';
+    return out;
+  }
 }
 
 /** Rough token count for when the service doesn't report usage (≈3 characters a token for mixed Vietnamese/English). */

@@ -42,6 +42,8 @@ export class QuotaService {
   private readonly logger = new Logger(QuotaService.name);
   readonly full: Plan;
   readonly saver: Plan;
+  /** Tried in order when the plan's model fails before answering (another provider's quota, an outage). */
+  private readonly fallbacks: { model: string; effort: Effort }[];
   private readonly fullLimit: number;
   private readonly saverLimit: number;
   private readonly suggestLimit: number;
@@ -74,6 +76,19 @@ export class QuotaService {
       model: config.get('ASSISTANT_SAVER_MODEL', 'cx/gpt-6-luna'),
       effort: config.get<Effort>('ASSISTANT_SAVER_EFFORT', 'low'),
     };
+    // "model[:effort],…"
+    this.fallbacks = config
+      .get<string>(
+        'ASSISTANT_FALLBACK_MODELS',
+        'ag/claude-opus-5-5-high:xhigh,ag/gemini-4-argon-high:high,minimax/MiniMax-M3:high',
+      )
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => {
+        const [model, effort] = s.split(':') as [string, Effort | undefined];
+        return { model, effort: effort ?? 'high' };
+      });
     this.fullLimit = num('ASSISTANT_DAILY_FULL', 30);
     this.saverLimit = num('ASSISTANT_DAILY_SAVER', 50);
     this.suggestLimit = num('ASSISTANT_DAILY_SUGGEST', 100);
@@ -155,10 +170,27 @@ export class QuotaService {
     }
   }
 
-  /** Stores the tokens an answer used — or, when nothing was answered, un-counts the question. */
-  async settle(record: Usage, tokens: { prompt: number; completion: number } | null) {
+  /**
+   * The plan's model followed by the fallback models (same tier). The saver tier keeps its low
+   * effort on fallbacks so it stays cheap.
+   */
+  chain(plan: Plan): Plan[] {
+    const rest = this.fallbacks
+      .filter((f) => f.model !== plan.model)
+      .map((f) => ({ tier: plan.tier, model: f.model, effort: plan.tier === 'saver' ? plan.effort : f.effort }));
+    return [plan, ...rest];
+  }
+
+  /** Stores the tokens an answer used (and the model that wrote it) — or, when nothing was answered, un-counts the question. */
+  async settle(record: Usage, tokens: { prompt: number; completion: number } | null, model?: string) {
     try {
-      if (tokens) await this.usage.update(record.id, { promptTokens: tokens.prompt, completionTokens: tokens.completion });
+      if (tokens) {
+        await this.usage.update(record.id, {
+          promptTokens: tokens.prompt,
+          completionTokens: tokens.completion,
+          ...(model && { model }),
+        });
+      }
       else await this.usage.delete(record.id);
     } catch (error) {
       this.logger.error(`recording usage failed: ${error instanceof Error ? error.message : String(error)}`);
