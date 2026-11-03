@@ -1,5 +1,6 @@
 import clsx from 'clsx'
 import {
+  Brain,
   ClipboardCopy,
   Download,
   Ellipsis,
@@ -190,6 +191,9 @@ export function DocPage() {
               </MenuItem>
               <MenuItem icon={<Download />} onClick={() => downloadMarkdown(doc.title, doc.content)}>
                 Download .md
+              </MenuItem>
+              <MenuItem icon={<Brain />} onClick={() => navigate(`/review/session?doc=${doc.id}`)}>
+                Quiz me on this
               </MenuItem>
               <MenuItem icon={<FolderInput />} onClick={() => setMoving(true)}>
                 Move to project…

@@ -19,6 +19,8 @@ import { BlogPost } from './pages/BlogPost'
 import { HomePage } from './pages/HomePage'
 import { NotFound } from './pages/NotFound'
 import { ProjectPage } from './pages/ProjectPage'
+import { ReviewPage } from './pages/ReviewPage'
+import { ReviewSession } from './pages/ReviewSession'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -85,6 +87,8 @@ const router = createBrowserRouter([
       { path: 'd/:id', element: <DocPage /> },
       { path: 'd/:id/edit', element: <EditorPage /> },
       { path: 'p/:id', element: <ProjectPage /> },
+      { path: 'review', element: <ReviewPage /> },
+      { path: 'review/session', element: <ReviewSession /> },
       { path: '*', element: <NotFound /> },
     ],
   },

@@ -9,6 +9,7 @@ import { HealthController } from './health/health.controller';
 import { ProjectsModule } from './projects/projects.module';
 import { McpModule } from './mcp/mcp.module';
 import { PublicModule } from './public/public.module';
+import { ReviewModule } from './review/review.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { PublicModule } from './public/public.module';
     AssistantModule,
     PublicModule,
     McpModule,
+    ReviewModule,
   ],
   controllers: [HealthController],
 })

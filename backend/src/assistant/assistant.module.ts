@@ -12,8 +12,14 @@ import { QuotaService } from './quota.service';
 import { Usage } from './usage.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Conversation, Message, Usage, User]), DocsModule, ProjectsModule, AnnotationsModule],
+  imports: [
+    TypeOrmModule.forFeature([Conversation, Message, Usage, User]),
+    DocsModule,
+    ProjectsModule,
+    AnnotationsModule,
+  ],
   controllers: [AssistantController],
   providers: [AssistantService, ConversationsService, QuotaService],
+  exports: [AssistantService],
 })
 export class AssistantModule {}

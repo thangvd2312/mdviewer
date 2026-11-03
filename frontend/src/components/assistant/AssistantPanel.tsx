@@ -19,6 +19,7 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useLocation } from 'react-router'
 import { api, type AssistantContext, type AssistantQuota, type ChatTurn } from '../../lib/api'
 import { conversationQuery, useAssistant, useAssistantState, type PageInfo } from '../../lib/assistant'
 import { timeAgo } from '../../lib/format'
@@ -33,10 +34,12 @@ export function Assistant() {
   const { open, thread } = useAssistantState()
   const { setOpen } = useAssistant()
   const [side, setSide] = useState<Side>('right')
+  // A review session is focus mode: the floating button would cover the answer buttons.
+  const focusMode = useLocation().pathname.startsWith('/review/session')
 
   return (
     <>
-      {!open && (
+      {!open && !focusMode && (
         <AssistiveButton
           hint={thread.streaming}
           onOpen={(s) => {

@@ -30,6 +30,43 @@ export interface DocSummary {
   allowComments: boolean
 }
 
+export type ReviewRating = 'again' | 'hard' | 'good' | 'easy'
+
+/** A review question about one of the user's documents. */
+export interface ReviewCard {
+  id: string
+  docId: string
+  docTitle: string
+  question: string
+  answer: string
+  section: string | null
+  /** asked = built from a question the user asked the assistant; note = from a sticky note; key = a key point. */
+  origin: 'asked' | 'key' | 'note'
+  basedOn: string | null
+  isNew: boolean
+  due: string
+  /** ms from now until it would be due again, per rating. */
+  next: Record<ReviewRating, number>
+}
+
+export interface ReviewSummary {
+  due: number
+  total: number
+  new: number
+  reviewedToday: number
+  streak: number
+  docs: {
+    id: string
+    title: string
+    project: string | null
+    /** Questions the user asked the assistant about it. */
+    asked: number
+    notes: number
+    cards: number
+    due: number
+  }[]
+}
+
 /** A personal access token for AI agents (MCP). */
 export interface ApiTokenInfo {
   id: string
@@ -342,6 +379,20 @@ export const api = {
     update: (id: string, input: DocInput) => request<Doc>('PATCH', `/docs/${id}`, input),
     remove: (id: string) => request<void>('DELETE', `/docs/${id}`),
     setSharing: (id: string, input: SharingInput) => request<Doc>('PUT', `/docs/${id}/sharing`, input),
+  },
+  review: {
+    summary: () => request<ReviewSummary>('GET', '/review'),
+    session: (docId?: string) =>
+      request<ReviewCard[]>('GET', '/review/session' + qs({ docId, limit: docId ? 20 : 15 })),
+    /** The AI writes questions about a document (counts as one assistant question). */
+    generate: (docId: string) => request<ReviewCard[]>('POST', '/review/generate', { docId }),
+    answer: (id: string, rating: ReviewRating) =>
+      request<{ due: string }>('POST', `/review/cards/${id}/answer`, { rating }),
+    check: (id: string, answer: string) =>
+      request<{ verdict: 'correct' | 'partial' | 'wrong'; feedback: string }>('POST', `/review/cards/${id}/check`, {
+        answer,
+      }),
+    remove: (id: string) => request<void>('DELETE', `/review/cards/${id}`),
   },
   tokens: {
     list: () => request<ApiTokenInfo[]>('GET', '/tokens'),

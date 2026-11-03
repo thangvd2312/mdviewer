@@ -98,6 +98,14 @@ Trợ lý gọi bất kỳ endpoint nào tương thích OpenAI Chat Completions.
 - **Lưu giữ dữ liệu**: sau `COMMENT_IP_RETENTION_DAYS` ngày (mặc định 90) IP và user agent của bình luận bị xoá (chỉ giữ nhãn thiết bị ngắn như "iPhone · Safari").
 - Người đọc **đã đăng nhập** hỏi được trợ lý AI về bài public của người khác (không thấy sticky note hay project của tác giả).
 
+### Ôn tập (Review)
+
+Mục **Review** trong sidebar (có số câu đến hạn):
+- **Câu hỏi do AI soạn cho từng tài liệu**, từ 3 nguồn: những gì bạn đã hỏi trợ lý về tài liệu đó (*From your question*, kèm câu bạn đã hỏi), sticky note của bạn (*From your note*), và các ý quan trọng cần nhớ (*Key point*). Mỗi lần soạn (~8 câu) tính là 1 câu hỏi trong hạn mức trợ lý; câu trùng bị loại; tối đa 60 câu mỗi tài liệu.
+- **Lặp lại ngắt quãng**: sau mỗi câu tự chấm *Forgot / Hard / Got it / Easy* — quên thì 10 phút sau hỏi lại (và hỏi lại ngay trong buổi), nhớ thì 1 → 3 → ~7 ngày → … Trang Review cho biết hôm nay còn bao nhiêu câu, chuỗi ngày ôn liên tục, và gợi ý tài liệu nên ôn (ưu tiên tài liệu bạn hỏi nhiều nhất).
+- Trả lời bằng chữ rồi **Check with AI** (model rẻ) để được chấm và giải thích; đáp án có link tới đúng mục trong tài liệu. Phím tắt: Space hiện đáp án, 1–4 để chấm.
+- Trong tài liệu: menu ⋯ → **Quiz me on this** để ôn riêng tài liệu đó.
+
 ### Kết nối AI agent (MCP)
 
 viewmd có sẵn một MCP server (streamable HTTP) tại `https://<site>/api/mcp`, để Claude Code, Codex, Cursor… lưu và tra cứu ghi chú của bạn. Ví dụ: *"Lưu những gì vừa tìm hiểu về Redis vào viewmd, project Backend"*.
@@ -156,6 +164,12 @@ Tất cả route (trừ `auth/github*`) cần header `Authorization: Bearer <tok
 | GET / DELETE | `/api/public/blocks`, `/api/public/blocks/:id` | Danh sách người bị chặn / bỏ chặn |
 | GET / POST / DELETE | `/api/tokens`, `/api/tokens/:id` | Token cho AI agent: liệt kê / tạo `{ name }` (trả token một lần) / thu hồi |
 | POST | `/api/mcp` | MCP server (streamable HTTP), `Authorization: Bearer <token>` |
+| GET | `/api/review` | Tóm tắt ôn tập: số câu đến hạn, chuỗi ngày, tài liệu gợi ý |
+| GET | `/api/review/session` | Câu cần ôn (`?docId=` để ôn một tài liệu) |
+| POST | `/api/review/generate` | `{ docId }` — AI soạn câu hỏi cho tài liệu |
+| POST | `/api/review/cards/:id/answer` | `{ rating: again\|hard\|good\|easy }` — lên lịch lần ôn sau |
+| POST | `/api/review/cards/:id/check` | `{ answer }` — AI chấm câu trả lời |
+| DELETE | `/api/review/cards/:id` | Bỏ câu hỏi |
 
 Nội dung tối đa khoảng 2 triệu ký tự (body JSON giới hạn 5 MB).
 

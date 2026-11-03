@@ -1,4 +1,4 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import { HttpException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Response } from 'express';
 import OpenAI from 'openai';
@@ -299,6 +299,64 @@ Reply with only a JSON object, no code fence: {"questions": ["…", "…", "…"
     this.suggestCache.set(key, { at: now, questions });
   }
 
+  /**
+   * A one-off completion for other features (review questions, answer checks). `full` counts as one
+   * of the user's daily questions (main or saver model, per their allowance); `light` uses the cheap
+   * model and the suggestions allowance. Fallback models are tried in turn. Returns the reply text.
+   */
+  async complete(ownerId: string, messages: ChatCompletionMessageParam[], mode: 'full' | 'light'): Promise<string> {
+    const client = this.requireClient();
+    if (mode === 'light') {
+      const plan = await this.quota.suggestPlan(ownerId);
+      if (!plan) throw new HttpException('You’ve used today’s quick AI checks. They reset at midnight.', 429);
+      for (const attempt of this.quota.chain(plan).slice(0, 2)) {
+        try {
+          const response = await client.chat.completions.create(
+            { model: attempt.model, reasoning_effort: 'low', messages },
+            { maxRetries: 0, timeout: 60_000 },
+          );
+          await this.quota.recordSuggest(ownerId, attempt, {
+            prompt: response.usage?.prompt_tokens ?? 0,
+            completion: response.usage?.completion_tokens ?? 0,
+          });
+          return stripThink(response.choices[0]?.message?.content ?? '');
+        } catch (error) {
+          this.logger.warn(`light completion with ${attempt.model} failed: ${describe(error)}`);
+        }
+      }
+      throw new ServiceUnavailableException('The AI service is busy right now — try again in a moment.');
+    }
+
+    const { plan, record, release } = await this.quota.admit(ownerId);
+    let tokens: { prompt: number; completion: number } | null = null;
+    let model = plan.model;
+    try {
+      const attempts = this.quota.chain(plan);
+      for (const [i, attempt] of attempts.entries()) {
+        try {
+          const response = await client.chat.completions.create(
+            { model: attempt.model, reasoning_effort: attempt.effort, messages },
+            { maxRetries: i === attempts.length - 1 ? 2 : 0 },
+          );
+          model = attempt.model;
+          tokens = {
+            prompt: response.usage?.prompt_tokens ?? 0,
+            completion: response.usage?.completion_tokens ?? 0,
+          };
+          const text = stripThink(response.choices[0]?.message?.content ?? '');
+          if (text.trim()) return text;
+        } catch (error) {
+          this.logger.warn(`completion with ${attempt.model} failed: ${describe(error)}`);
+        }
+      }
+      throw new ServiceUnavailableException('The AI service is busy right now — try again in a moment.');
+    } finally {
+      // Nothing came back = the question isn't counted.
+      await this.quota.settle(record, tokens, model);
+      release();
+    }
+  }
+
   private requireClient() {
     if (!this.client)
       throw new ServiceUnavailableException('The assistant is not configured (set ASSISTANT_API_KEY on the server).');
@@ -421,6 +479,8 @@ class ThinkFilter {
     return out;
   }
 }
+
+const stripThink = (text: string) => text.replace(/^\s*<think>[\s\S]*?<\/think>/, '').trim();
 
 /** Rough token count for when the service doesn't report usage (≈3 characters a token for mixed Vietnamese/English). */
 const estimateTokens = (messages: ChatCompletionMessageParam[]) =>

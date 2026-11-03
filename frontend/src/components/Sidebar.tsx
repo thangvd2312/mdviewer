@@ -1,6 +1,7 @@
 import clsx from 'clsx'
 import {
   Bot,
+  Brain,
   ChevronRight,
   Compass,
   FileText,
@@ -23,7 +24,7 @@ import { DeleteDocButton, revealOnHover } from './DeleteDocButton'
 import type { DocSummary } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { initials } from '../lib/format'
-import { useDocs, useProjects } from '../lib/queries'
+import { useDocs, useProjects, useReviewSummary } from '../lib/queries'
 import { useStoredState } from '../lib/storage'
 import { useUI, type ThemePref } from '../lib/ui'
 import { ProjectDialog } from './ProjectDialog'
@@ -42,6 +43,7 @@ export function Sidebar() {
   const { setSidebarOpen, setSearchOpen } = useUI()
   const { data: projects = [] } = useProjects()
   const { data: docs = [] } = useDocs()
+  const { data: review } = useReviewSummary()
   const [expanded, setExpanded] = useStoredState<string[]>('viewmd.expanded', [])
   const [creatingProject, setCreatingProject] = useState(false)
   const [connectingAgent, setConnectingAgent] = useState(false)
@@ -95,6 +97,15 @@ export function Sidebar() {
         <NavLink to="/new" end className={rowClass}>
           <SquarePen className="size-4 text-ink-muted" />
           New note
+        </NavLink>
+        <NavLink to="/review" className={rowClass}>
+          <Brain className="size-4 text-ink-muted" />
+          Review
+          {(review?.due ?? 0) > 0 && (
+            <span className="ml-auto rounded-full bg-accent px-1.5 text-[11px] leading-[18px] font-semibold text-white tabular-nums">
+              {review!.due}
+            </span>
+          )}
         </NavLink>
         <NavLink to="/blog" className={rowClass}>
           <Compass className="size-4 text-ink-muted" />

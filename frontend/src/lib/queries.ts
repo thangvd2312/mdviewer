@@ -208,6 +208,9 @@ export function useAnnotationMutations(docId: string) {
   return { create, update, remove }
 }
 
+export const useReviewSummary = () =>
+  useQuery({ queryKey: ['review', 'summary'], queryFn: api.review.summary, staleTime: 60_000 })
+
 export const useAssistantStatus = () =>
   // Carries today's allowance: refreshed after every question, and now and then (it resets at midnight).
   useQuery({ queryKey: keys.assistantStatus, queryFn: api.assistant.status, staleTime: 60_000 })
