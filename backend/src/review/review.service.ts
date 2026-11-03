@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
@@ -10,12 +10,23 @@ import { AssistantService } from '../assistant/assistant.service';
 import { Doc } from '../docs/doc.entity';
 import { DocsService } from '../docs/docs.service';
 import { extractSection, outline } from '../docs/markdown.util';
+import { fromFsrs, GRADES, newMemory, scheduler, State, toFsrs } from './fsrs';
 import { CardOrigin, ORIGINS, Rating, RATINGS, ReviewCard, ReviewEvent } from './review.entity';
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
 /** Most questions kept per document. */
 const MAX_CARDS_PER_DOC = 60;
+/**
+ * "Mastered" (FSRS): out of the learning steps, with memory stable for at least this many days —
+ * in practice answered right 2–3 times, days apart.
+ */
+const MASTERED_STABILITY_DAYS = 5;
+/** A document is levelled up (new, harder questions) once this share of its questions is mastered and none is new. */
+const LEVEL_UP_SHARE = 0.8;
+const LEVEL_UP_COUNT = 6;
+/** At most one automatic batch per document per this long. */
+const LEVEL_UP_EVERY_MS = 20 * 3600_000;
 const DOC_MAX_CHARS = 60_000;
 
 export interface CardView {
@@ -28,41 +39,18 @@ export interface CardView {
   origin: CardOrigin;
   basedOn: string | null;
   isNew: boolean;
+  /** Added automatically after the user mastered the earlier questions. */
+  levelUp: boolean;
   due: string;
+  /** FSRS: chance the user still remembers it now (0–1); null for new cards. */
+  recall: number | null;
   /** When it would be due next for each rating, ms from now (for the buttons' labels). */
   next: Record<Rating, number>;
 }
 
-/**
- * Spaced repetition (a small SM-2 variant): "again" brings a card back in 10 minutes; otherwise the
- * interval grows — 1 day, then 3, then × ease — and ease adapts to how hard the card felt.
- */
-export function schedule(
-  card: Pick<ReviewCard, 'intervalDays' | 'ease' | 'reps' | 'lapses'>,
-  rating: Rating,
-  now = Date.now(),
-) {
-  let { intervalDays, ease, reps, lapses } = card;
-  if (rating === 'again') {
-    if (reps > 0) lapses += 1;
-    return { intervalDays: 0, ease: Math.max(1.3, ease - 0.2), reps: 0, lapses, due: new Date(now + 10 * MINUTE) };
-  }
-  if (rating === 'hard') {
-    // A new card that was hard comes back later today; after that, a bit later than last time.
-    intervalDays = reps === 0 ? 0.25 : Math.max(1, intervalDays * 1.2);
-    ease = Math.max(1.3, ease - 0.15);
-  } else if (rating === 'good') {
-    intervalDays = reps === 0 ? 1 : reps === 1 ? 3 : intervalDays * ease;
-  } else {
-    intervalDays = reps === 0 ? 3 : reps === 1 ? 6 : intervalDays * ease * 1.3;
-    ease = Math.min(3.5, ease + 0.15);
-  }
-  intervalDays = Math.min(365, intervalDays);
-  return { intervalDays, ease, reps: reps + 1, lapses, due: new Date(now + intervalDays * DAY) };
-}
-
 @Injectable()
 export class ReviewService {
+  private readonly logger = new Logger(ReviewService.name);
   private readonly timeZone: string;
 
   constructor(
@@ -84,7 +72,7 @@ export class ReviewService {
     const [due, total, fresh, recentEvents] = await Promise.all([
       this.cards.count({ where: { ownerId, due: LessThanOrEqual(now) } }),
       this.cards.count({ where: { ownerId } }),
-      this.cards.count({ where: { ownerId, reps: 0, lastReviewedAt: IsNull() } }),
+      this.cards.count({ where: { ownerId, state: State.New } }),
       this.events.find({
         where: { ownerId, reviewedAt: MoreThanOrEqual(new Date(now.getTime() - 400 * DAY)) },
         select: { reviewedAt: true },
@@ -104,8 +92,26 @@ export class ReviewService {
       new: fresh,
       reviewedToday: recentEvents.filter((e) => this.day(e.reviewedAt) === today).length,
       streak,
+      levelledUp: await this.recentLevelUps(ownerId, now),
       docs: await this.candidates(ownerId, now),
     };
+  }
+
+  /** Documents that got automatic, harder questions in the last 3 days which haven't been tried yet. */
+  private async recentLevelUps(ownerId: string, now: Date) {
+    const rows = await this.cards
+      .createQueryBuilder('c')
+      .innerJoin('c.doc', 'd')
+      .select(['c.docId AS docId', 'd.title AS title', 'COUNT(*) AS count'])
+      .where("c.ownerId = :ownerId AND c.addedBy = 'auto' AND c.state = :fresh AND c.createdAt >= :since", {
+        ownerId,
+        fresh: State.New,
+        since: new Date(now.getTime() - 3 * DAY),
+      })
+      .groupBy('c.docId')
+      .addGroupBy('d.title')
+      .getRawMany<{ docId: string; title: string; count: string }>();
+    return rows.map((r) => ({ docId: r.docId, title: r.title, count: Number(r.count) }));
   }
 
   /**
@@ -138,7 +144,15 @@ export class ReviewService {
       )
       .addSelect((q) => q.select('COUNT(*)').from(ReviewCard, 'r').where('r.docId = d.id'), 'cards')
       .addSelect((q) => q.select('COUNT(*)').from(ReviewCard, 'r2').where('r2.docId = d.id AND r2.due <= :now'), 'due')
-      .where('d.ownerId = :ownerId AND d.wordCount >= 40', { ownerId, now })
+      .addSelect(
+        (q) =>
+          q
+            .select('COUNT(*)')
+            .from(ReviewCard, 'r3')
+            .where(`r3.docId = d.id AND r3.state = ${State.Review} AND r3.stability >= :mastered`),
+        'mastered',
+      )
+      .where('d.ownerId = :ownerId AND d.wordCount >= 40', { ownerId, now, mastered: MASTERED_STABILITY_DAYS })
       .orderBy('asked', 'DESC')
       .addOrderBy('notes', 'DESC')
       .addOrderBy('d.lastOpenedAt', 'DESC')
@@ -152,6 +166,7 @@ export class ReviewService {
       notes: Number(r.notes ?? 0),
       cards: Number(r.cards ?? 0),
       due: Number(r.due ?? 0),
+      mastered: Number(r.mastered ?? 0),
     }));
   }
 
@@ -178,10 +193,17 @@ export class ReviewService {
     return this.views(picked, now.getTime());
   }
 
-  /** Has the AI write questions about a document from what the user asked, their notes, and its key points. */
-  async generate(ownerId: string, docId: string, count = 8) {
+  /**
+   * Has the AI write questions about a document from what the user asked, their notes, and its key
+   * points. `auto`: the user mastered the earlier questions — go deeper, aim at what they still get
+   * wrong, and cover what hasn't been asked yet.
+   */
+  async generate(ownerId: string, docId: string, count = 8, addedBy: 'user' | 'auto' = 'user') {
     const doc = await this.docs.findOwned(ownerId, docId);
-    const existing = await this.cards.find({ where: { ownerId, docId }, select: { id: true, question: true } });
+    const existing = await this.cards.find({
+      where: { ownerId, docId },
+      select: { id: true, question: true, state: true, stability: true, lapses: true, difficulty: true },
+    });
     const room = MAX_CARDS_PER_DOC - existing.length;
     if (room <= 0) throw new BadRequestException('This document already has plenty of questions.');
     const want = Math.min(count, room);
@@ -215,8 +237,8 @@ export class ReviewService {
             .join('\n')}\n</sticky_notes>`
         : '',
       existing.length
-        ? `<existing_questions>\nAlready asked — don't repeat these or ask the same thing in other words:\n${existing
-            .map((c) => `- ${clip(c.question, 200)}`)
+        ? `<existing_questions>\nAlready asked — don't repeat these or ask the same thing in other words. In brackets: how the learner is doing with each.\n${existing
+            .map((c) => `- ${clip(c.question, 200)} [${performance(c)}]`)
             .join('\n')}\n</existing_questions>`
         : '',
     ].filter(Boolean);
@@ -230,7 +252,12 @@ export class ReviewService {
         role: 'user',
         content: `${blocks.join('\n\n')}
 
-Write ${want} review questions about this document.
+Write ${want} review questions about this document.${
+          addedBy === 'auto'
+            ? `
+- The learner has mastered most of the existing questions, so raise the level: application to a concrete situation, "what happens if…", trade-offs and comparisons that connect different sections, edge cases and common mistakes. Make some of them probe the points marked "struggling" from a new angle, and cover important parts of the document no existing question touches. Still answerable from memory, still about this document.`
+            : ''
+        }
 - If there are learner questions, about half of yours should check exactly what the learner asked about — the thing they were unsure of — with origin "asked" and basedOn set to the learner's question it comes from (verbatim). If a sticky note marks something as important, a definition, a question or a to-do, you may build a question on it with origin "note". The rest test the ideas most worth remembering, with origin "key".
 - Each question must be answerable from memory, without the document in front of you, and be self-contained (name the concept; don't say "in this section").
 - Prefer understanding over trivia: why, how, when to use which, differences, consequences, small applied scenarios. No yes/no questions, no questions about the document itself.
@@ -266,13 +293,9 @@ Reply with only a JSON object, no code fence:
           section: c.section,
           origin: c.origin,
           basedOn: c.basedOn,
+          addedBy,
           // New cards are due now; a millisecond apart keeps their order stable.
-          due: new Date(now.getTime() + i),
-          intervalDays: 0,
-          ease: 2.5,
-          reps: 0,
-          lapses: 0,
-          lastReviewedAt: null,
+          ...newMemory(new Date(now.getTime() + i)),
           createdAt: now,
         }),
       ),
@@ -280,14 +303,69 @@ Reply with only a JSON object, no code fence:
     return this.views(saved, now.getTime());
   }
 
-  /** Records how well the user remembered, and schedules the card's next review. */
+  /** Records how well the user remembered; FSRS schedules the next review. Returns the updated card. */
   async answer(ownerId: string, cardId: string, rating: Rating) {
     const card = await this.find(ownerId, cardId);
-    const now = Date.now();
-    const next = schedule(card, rating, now);
-    await this.cards.update(card.id, { ...next, lastReviewedAt: new Date(now) });
-    await this.events.save(this.events.create({ ownerId, cardId: card.id, rating, reviewedAt: new Date(now) }));
-    return { due: next.due.toISOString() };
+    const now = new Date();
+    const { card: next, log } = scheduler.next(toFsrs(card.id, card), now, GRADES[rating]);
+    const memory = fromFsrs(next);
+    await this.cards.update(card.id, memory);
+    await this.events.save(
+      this.events.create({
+        ownerId,
+        cardId: card.id,
+        rating,
+        reviewedAt: now,
+        state: log.state,
+        elapsedDays: log.elapsed_days,
+        stability: memory.stability,
+        difficulty: memory.difficulty,
+        scheduledDays: memory.scheduledDays,
+      }),
+    );
+    const [view] = await this.views([Object.assign(card, memory)], now.getTime());
+    // Good answers may complete a document: then new, harder questions are written in the background.
+    const levelUp = rating !== 'again' && (await this.startLevelUp(ownerId, card.docId));
+    return { ...view!, levelledUp: levelUp ? { docId: card.docId, docTitle: view!.docTitle } : null };
+  }
+
+  /** Documents with automatic generation running right now (one at a time per document). */
+  private readonly levellingUp = new Set<string>();
+
+  /**
+   * If the user has mastered a document's questions (none new, ≥ 80% mastered), starts writing new,
+   * harder ones in the background. Returns whether it started. Errors (e.g. no assistant allowance
+   * left today) are logged and retried after a later answer.
+   */
+  private async startLevelUp(ownerId: string, docId: string) {
+    if (this.levellingUp.has(docId)) return false;
+    const stats = await this.cards
+      .createQueryBuilder('c')
+      .select('COUNT(*)', 'total')
+      .addSelect(`SUM(c.state = ${State.New})`, 'fresh')
+      .addSelect(`SUM(c.state = ${State.Review} AND c.stability >= :s)`, 'mastered')
+      .addSelect("MAX(CASE WHEN c.addedBy = 'auto' THEN c.createdAt END)", 'lastAuto')
+      .where('c.ownerId = :ownerId AND c.docId = :docId', { ownerId, docId, s: MASTERED_STABILITY_DAYS })
+      .getRawOne<{ total: string; fresh: string | null; mastered: string | null; lastAuto: Date | string | null }>();
+    const total = Number(stats?.total ?? 0);
+    const fresh = Number(stats?.fresh ?? 0);
+    const mastered = Number(stats?.mastered ?? 0);
+    const lastAuto = stats?.lastAuto ? new Date(stats.lastAuto).getTime() : 0;
+    const ready =
+      total > 0 &&
+      fresh === 0 &&
+      mastered >= Math.ceil(total * LEVEL_UP_SHARE) &&
+      total < MAX_CARDS_PER_DOC &&
+      Date.now() - lastAuto >= LEVEL_UP_EVERY_MS;
+    if (!ready) return false;
+    this.levellingUp.add(docId);
+    void this.generate(ownerId, docId, LEVEL_UP_COUNT, 'auto')
+      .then((cards) => this.logger.log(`level up: ${cards.length} new questions for doc ${docId}`))
+      .catch((e: unknown) =>
+        this.logger.warn(`level up for doc ${docId} skipped: ${e instanceof Error ? e.message : e}`),
+      )
+      .finally(() => this.levellingUp.delete(docId));
+    return true;
   }
 
   /** The AI's verdict on a typed answer (cheap model; counted with quick checks). */
@@ -347,28 +425,42 @@ Is the learner's answer correct? Judge the meaning, not the wording. Reply with 
           ]),
         )
       : new Map<string, string>();
-    return cards.map((c) => ({
-      id: c.id,
-      docId: c.docId,
-      docTitle: titles.get(c.docId) ?? '',
-      question: c.question,
-      answer: c.answer,
-      section: c.section,
-      origin: c.origin,
-      basedOn: c.basedOn,
-      isNew: c.reps === 0 && !c.lastReviewedAt,
-      due: c.due.toISOString(),
-      next: Object.fromEntries(RATINGS.map((r) => [r, schedule(c, r, now).due.getTime() - now])) as Record<
-        Rating,
-        number
-      >,
-    }));
+    return cards.map((c) => {
+      const memory = toFsrs(c.id, c);
+      const preview = scheduler.repeat(memory, new Date(now));
+      return {
+        id: c.id,
+        docId: c.docId,
+        docTitle: titles.get(c.docId) ?? '',
+        question: c.question,
+        answer: c.answer,
+        section: c.section,
+        origin: c.origin,
+        basedOn: c.basedOn,
+        isNew: c.state === State.New,
+        levelUp: c.addedBy === 'auto',
+        due: c.due.toISOString(),
+        recall: c.state === State.New ? null : scheduler.get_retrievability(memory, new Date(now), false),
+        next: Object.fromEntries(RATINGS.map((r) => [r, preview[GRADES[r]].card.due.getTime() - now])) as Record<
+          Rating,
+          number
+        >,
+      };
+    });
   }
 
   /** Calendar day in the user's time zone. */
   private day(d: Date) {
     return new Intl.DateTimeFormat('en-CA', { timeZone: this.timeZone }).format(d);
   }
+}
+
+/** How the learner is doing with a question, for the AI writing new ones. */
+function performance(c: Pick<ReviewCard, 'state' | 'stability' | 'lapses' | 'difficulty'>) {
+  if (c.state === State.New) return 'not tried yet';
+  if (c.lapses >= 2 || c.difficulty >= 7 || c.state === State.Relearning) return `struggling: forgotten ${c.lapses}×`;
+  if (c.state === State.Review && c.stability >= MASTERED_STABILITY_DAYS) return 'mastered';
+  return 'learning';
 }
 
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);

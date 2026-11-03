@@ -9,7 +9,11 @@ export type CardOrigin = (typeof ORIGINS)[number];
 export const RATINGS = ['again', 'hard', 'good', 'easy'] as const;
 export type Rating = (typeof RATINGS)[number];
 
-/** A review question (flashcard) about one document, with its spaced-repetition schedule. */
+/**
+ * A review question (flashcard) about one document, with its FSRS memory state (see ReviewService):
+ * stability (days until recall drops to 90%), difficulty (1–10), state (0 new, 1 learning,
+ * 2 review, 3 relearning) and the current (re)learning step.
+ */
 @Entity('review_cards')
 @Index(['ownerId', 'due'])
 @Index(['docId', 'createdAt'])
@@ -45,6 +49,10 @@ export class ReviewCard {
   @Column({ type: 'varchar', length: 16 })
   origin: CardOrigin;
 
+  /** user = the user asked for questions; auto = added because they had mastered the earlier ones. */
+  @Column({ type: 'varchar', length: 8, default: 'user' })
+  addedBy: 'user' | 'auto';
+
   /** origin = asked: the user's own question it was built from. */
   @Column({ type: 'text', nullable: true })
   basedOn: string | null;
@@ -53,13 +61,30 @@ export class ReviewCard {
   @Column({ type: 'datetime', precision: 3 })
   due: Date;
 
-  @Column({ type: 'float', default: 0 })
-  intervalDays: number;
+  /** FSRS: 0 New, 1 Learning, 2 Review, 3 Relearning. */
+  @Column({ type: 'tinyint', unsigned: true, default: 0 })
+  state: number;
 
-  @Column({ type: 'float', default: 2.5 })
-  ease: number;
+  /** FSRS stability, in days. */
+  @Column({ type: 'double', default: 0 })
+  stability: number;
 
-  /** Successful reviews in a row. */
+  /** FSRS difficulty, 1–10. */
+  @Column({ type: 'double', default: 0 })
+  difficulty: number;
+
+  @Column({ type: 'int', default: 0 })
+  elapsedDays: number;
+
+  /** Days until the next review, as last scheduled (0 while learning). */
+  @Column({ type: 'int', default: 0 })
+  scheduledDays: number;
+
+  /** Current (re)learning step. */
+  @Column({ type: 'int', default: 0 })
+  learningSteps: number;
+
+  /** Reviews so far. */
   @Column({ type: 'int', default: 0 })
   reps: number;
 
@@ -100,4 +125,23 @@ export class ReviewEvent {
 
   @Column({ type: 'datetime', precision: 3 })
   reviewedAt: Date;
+
+  // FSRS review log — what an optimizer needs to fit personal parameters later.
+  /** Card state before this review. */
+  @Column({ type: 'tinyint', unsigned: true, default: 0 })
+  state: number;
+
+  /** Days since the previous review. */
+  @Column({ type: 'int', default: 0 })
+  elapsedDays: number;
+
+  /** Stability / difficulty / interval after this review. */
+  @Column({ type: 'double', default: 0 })
+  stability: number;
+
+  @Column({ type: 'double', default: 0 })
+  difficulty: number;
+
+  @Column({ type: 'int', default: 0 })
+  scheduledDays: number;
 }

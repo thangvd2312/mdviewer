@@ -44,7 +44,11 @@ export interface ReviewCard {
   origin: 'asked' | 'key' | 'note'
   basedOn: string | null
   isNew: boolean
+  /** Added automatically after the user mastered the earlier questions. */
+  levelUp: boolean
   due: string
+  /** FSRS: chance the user still remembers it now (0–1); null for new cards. */
+  recall: number | null
   /** ms from now until it would be due again, per rating. */
   next: Record<ReviewRating, number>
 }
@@ -55,6 +59,8 @@ export interface ReviewSummary {
   new: number
   reviewedToday: number
   streak: number
+  /** Documents that got new, harder questions (not tried yet) because the earlier ones were mastered. */
+  levelledUp: { docId: string; title: string; count: number }[]
   docs: {
     id: string
     title: string
@@ -64,6 +70,8 @@ export interface ReviewSummary {
     notes: number
     cards: number
     due: number
+    /** Questions already mastered (FSRS: stable for 5+ days). */
+    mastered: number
   }[]
 }
 
@@ -386,8 +394,14 @@ export const api = {
       request<ReviewCard[]>('GET', '/review/session' + qs({ docId, limit: docId ? 20 : 15 })),
     /** The AI writes questions about a document (counts as one assistant question). */
     generate: (docId: string) => request<ReviewCard[]>('POST', '/review/generate', { docId }),
+    /** Returns the card with its new FSRS schedule. */
+    /** levelledUp: this answer completed the document — new, harder questions are being written. */
     answer: (id: string, rating: ReviewRating) =>
-      request<{ due: string }>('POST', `/review/cards/${id}/answer`, { rating }),
+      request<ReviewCard & { levelledUp: { docId: string; docTitle: string } | null }>(
+        'POST',
+        `/review/cards/${id}/answer`,
+        { rating },
+      ),
     check: (id: string, answer: string) =>
       request<{ verdict: 'correct' | 'partial' | 'wrong'; feedback: string }>('POST', `/review/cards/${id}/check`, {
         answer,

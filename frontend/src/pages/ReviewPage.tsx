@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Brain, CheckCircle2, Flame, MessageCircleQuestion, Play, Sparkles, StickyNote } from 'lucide-react'
+import { Brain, CheckCircle2, Flame, MessageCircleQuestion, Play, Sparkles, StickyNote, TrendingUp } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { TopBar } from '../components/AppLayout'
@@ -31,6 +31,7 @@ export function ReviewPage() {
           {s ? (
             <>
               <Today s={s} />
+              <LevelUps items={s.levelledUp} />
               <Documents docs={s.docs} />
             </>
           ) : (
@@ -156,6 +157,19 @@ function Documents({ docs }: { docs: ReviewSummary['docs'] }) {
                     </span>
                   )}
                 </div>
+                {d.cards > 0 && (
+                  <div className="mt-2 flex items-center gap-2" title="Mastered: remembered well over several days">
+                    <div className="h-1.5 w-full max-w-48 overflow-hidden rounded-full bg-hover">
+                      <div
+                        className="h-full rounded-full bg-emerald-500 transition-all"
+                        style={{ width: `${Math.round((d.mastered / d.cards) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="shrink-0 text-[12px] text-ink-faint tabular-nums">
+                      {d.mastered}/{d.cards} mastered
+                    </span>
+                  </div>
+                )}
               </div>
               <div className="flex shrink-0 gap-2">
                 {d.cards > 0 && (
@@ -186,5 +200,32 @@ function Documents({ docs }: { docs: ReviewSummary['docs'] }) {
         </p>
       )}
     </section>
+  )
+}
+
+/** "Level up": documents that just got new, harder questions because the earlier ones were mastered. */
+function LevelUps({ items }: { items: ReviewSummary['levelledUp'] }) {
+  if (items.length === 0) return null
+  return (
+    <ul className="mt-4 space-y-2">
+      {items.map((l) => (
+        <li
+          key={l.docId}
+          className="flex flex-col gap-3 rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-400/10 to-rose-400/10 px-4 py-3 sm:flex-row sm:items-center"
+        >
+          <TrendingUp className="size-5 shrink-0 text-amber-600 max-sm:hidden dark:text-amber-400" />
+          <p className="min-w-0 flex-1 text-[13.5px] leading-relaxed">
+            <span className="font-semibold">Level up!</span> You’ve mastered most of “{l.title}” — {l.count} harder{' '}
+            {l.count === 1 ? 'question was' : 'questions were'} added.
+          </p>
+          <Link
+            to={`/review/session?doc=${l.docId}`}
+            className={buttonClass('primary', 'h-9 shrink-0 rounded-full px-4')}
+          >
+            <Play className="size-3.5" fill="currentColor" /> Try them
+          </Link>
+        </li>
+      ))}
+    </ul>
   )
 }

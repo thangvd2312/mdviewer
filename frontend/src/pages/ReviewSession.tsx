@@ -9,6 +9,7 @@ import {
   Sparkles,
   StickyNote,
   Trash2,
+  TrendingUp,
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
@@ -47,6 +48,9 @@ const RATINGS: { rating: ReviewRating; label: string; key: string; tone: string 
     tone: 'border-sky-500/30 text-sky-700 hover:bg-sky-500/10 dark:text-sky-400',
   },
 ]
+
+/** A card due again within this is in a learning step: it comes back in the same session. */
+const LEARNING_WINDOW_MS = 20 * 60_000
 
 /** "10 min", "6 h", "3 days", "2 wk", "4 mo" */
 function inWords(ms: number) {
@@ -173,6 +177,8 @@ function Run({ initial, quiz }: { initial: ReviewCard[]; quiz: boolean }) {
   const [checking, setChecking] = useState(false)
   const [verdict, setVerdict] = useState<{ verdict: 'correct' | 'partial' | 'wrong'; feedback: string } | null>(null)
   const [saving, setSaving] = useState(false)
+  // Documents this session completed: new, harder questions are on their way for them.
+  const [levelledUp, setLevelledUp] = useState<string[]>([])
   const card = queue[0]
   const total = useMemo(() => new Set(initial.map((c) => c.id)).size, [initial])
   // Answered = no longer waiting (a forgotten card waits at the end of the queue).
@@ -188,9 +194,16 @@ function Run({ initial, quiz }: { initial: ReviewCard[]; quiz: boolean }) {
     if (!card || saving) return
     setSaving(true)
     try {
-      await api.review.answer(card.id, rating)
+      const updated = await api.review.answer(card.id, rating)
       setResults((r) => [...r, { rating }])
-      setQueue((q) => (rating === 'again' ? [...q.slice(1), { ...card, isNew: false }] : q.slice(1)))
+      if (updated.levelledUp) {
+        const title = updated.levelledUp.docTitle
+        setLevelledUp((l) => (l.includes(title) ? l : [...l, title]))
+        toast(`Level up! You’ve mastered “${title}” — harder questions are on the way`)
+      }
+      // Still in a short (re)learning step (FSRS: 1–10 min)? Ask it again later in this session.
+      const soon = new Date(updated.due).getTime() - Date.now() < LEARNING_WINDOW_MS
+      setQueue((q) => (soon ? [...q.slice(1), updated] : q.slice(1)))
       next()
       void queryClient.invalidateQueries({ queryKey: ['review', 'summary'] })
     } catch (e) {
@@ -246,7 +259,7 @@ function Run({ initial, quiz }: { initial: ReviewCard[]; quiz: boolean }) {
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  if (!card) return <Finished results={results} quiz={quiz} onAgain={() => navigate(0)} />
+  if (!card) return <Finished results={results} quiz={quiz} levelledUp={levelledUp} onAgain={() => navigate(0)} />
 
   const progress = Math.round((doneCount / total) * 100)
   return (
@@ -281,7 +294,23 @@ function Run({ initial, quiz }: { initial: ReviewCard[]; quiz: boolean }) {
                   {card.docTitle}
                 </Link>
               )}
+              {card.levelUp && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-400/20 to-rose-400/20 px-2 py-0.5 font-medium text-amber-800 dark:text-amber-300"
+                  title="Added after you mastered the earlier questions on this document"
+                >
+                  <TrendingUp className="size-3.5" /> Level up
+                </span>
+              )}
               {card.isNew && <span className="rounded-full bg-accent/10 px-2 py-0.5 font-medium text-accent">New</span>}
+              {card.recall !== null && (
+                <span
+                  className="rounded-full bg-hover px-2 py-0.5 text-ink-muted tabular-nums"
+                  title="FSRS estimate of the chance you still remember this right now"
+                >
+                  Recall {Math.round(card.recall * 100)}%
+                </span>
+              )}
             </div>
             <h1 className="mt-4 text-[21px] leading-snug font-semibold tracking-tight sm:text-[24px]">
               {card.question}
@@ -436,7 +465,17 @@ function Origin({ card }: { card: ReviewCard }) {
   )
 }
 
-function Finished({ results, quiz, onAgain }: { results: Result[]; quiz: boolean; onAgain: () => void }) {
+function Finished({
+  results,
+  quiz,
+  levelledUp,
+  onAgain,
+}: {
+  results: Result[]
+  quiz: boolean
+  levelledUp: string[]
+  onAgain: () => void
+}) {
   const count = (r: ReviewRating) => results.filter((x) => x.rating === r).length
   const remembered = count('good') + count('easy') + count('hard')
   return (
@@ -456,6 +495,16 @@ function Finished({ results, quiz, onAgain }: { results: Result[]; quiz: boolean
             </div>
           ))}
         </div>
+        {levelledUp.length > 0 && (
+          <div className="mt-6 flex w-full max-w-md items-start gap-3 rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-400/10 to-rose-400/10 px-4 py-3 text-left">
+            <TrendingUp className="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <p className="text-[13.5px] leading-relaxed">
+              <span className="font-semibold">Level up!</span> You’ve mastered most of{' '}
+              {levelledUp.map((t) => `“${t}”`).join(', ')}. New, harder questions are being written — they’ll be in your
+              next review.
+            </p>
+          </div>
+        )}
         <div className="mt-8 flex gap-2">
           <Link to="/review" className={buttonClass('primary', 'h-10 rounded-full px-5')}>
             <ArrowLeft className="size-4" /> Back to Review
