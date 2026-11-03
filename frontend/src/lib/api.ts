@@ -30,6 +30,16 @@ export interface DocSummary {
   allowComments: boolean
 }
 
+/** A personal access token for AI agents (MCP). */
+export interface ApiTokenInfo {
+  id: string
+  name: string
+  /** First characters, e.g. "vmd_Ab3x". */
+  prefix: string
+  createdAt: string
+  lastUsedAt: string | null
+}
+
 export interface SharingInput {
   public?: boolean
   allowComments?: boolean
@@ -332,6 +342,12 @@ export const api = {
     update: (id: string, input: DocInput) => request<Doc>('PATCH', `/docs/${id}`, input),
     remove: (id: string) => request<void>('DELETE', `/docs/${id}`),
     setSharing: (id: string, input: SharingInput) => request<Doc>('PUT', `/docs/${id}/sharing`, input),
+  },
+  tokens: {
+    list: () => request<ApiTokenInfo[]>('GET', '/tokens'),
+    /** The token itself comes back only here. */
+    create: (name: string) => request<ApiTokenInfo & { token: string }>('POST', '/tokens', { name }),
+    revoke: (id: string) => request<void>('DELETE', `/tokens/${id}`),
   },
   public: {
     list: (q: ExploreQuery) =>

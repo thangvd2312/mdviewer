@@ -98,6 +98,17 @@ Trợ lý gọi bất kỳ endpoint nào tương thích OpenAI Chat Completions.
 - **Lưu giữ dữ liệu**: sau `COMMENT_IP_RETENTION_DAYS` ngày (mặc định 90) IP và user agent của bình luận bị xoá (chỉ giữ nhãn thiết bị ngắn như "iPhone · Safari").
 - Người đọc **đã đăng nhập** hỏi được trợ lý AI về bài public của người khác (không thấy sticky note hay project của tác giả).
 
+### Kết nối AI agent (MCP)
+
+viewmd có sẵn một MCP server (streamable HTTP) tại `https://<site>/api/mcp`, để Claude Code, Codex, Cursor… lưu và tra cứu ghi chú của bạn. Ví dụ: *"Lưu những gì vừa tìm hiểu về Redis vào viewmd, project Backend"*.
+
+1. Trong app bấm biểu tượng robot ở góc dưới sidebar (**Connect an AI agent**) → tạo token (chỉ hiện một lần; server chỉ lưu hash; thu hồi được bất cứ lúc nào).
+2. Thêm vào agent:
+   - Claude Code: `claude mcp add --transport http viewmd https://<site>/api/mcp --header "Authorization: Bearer <token>"`
+   - Codex: `export VIEWMD_TOKEN=<token>` rồi `codex mcp add viewmd --url https://<site>/api/mcp --bearer-token-env-var VIEWMD_TOKEN`
+   - Client khác: `{"mcpServers":{"viewmd":{"url":"https://<site>/api/mcp","headers":{"Authorization":"Bearer <token>"}}}}`
+3. Tool: `save_note` (có thể kèm tên project — chưa có thì tạo), `append_to_note`, `update_note`, `search_notes`, `read_note`, `list_recent_notes`, `list_projects`. Agent **không** xoá hay publish được gì. Mỗi token chỉ thấy ghi chú của chủ token; giới hạn 60 lần ghi / 10 phút và 300 request / 5 phút mỗi token.
+
 ### Phím tắt
 
 | Phím | Tác dụng |
@@ -143,6 +154,8 @@ Tất cả route (trừ `auth/github*`) cần header `Authorization: Bearer <tok
 | PUT | `/api/public/comments/:id/hidden` | Chủ bài ẩn/hiện `{ hidden }` |
 | POST / DELETE | `/api/public/comments/:id/block` | Chủ bài chặn / bỏ chặn người viết bình luận |
 | GET / DELETE | `/api/public/blocks`, `/api/public/blocks/:id` | Danh sách người bị chặn / bỏ chặn |
+| GET / POST / DELETE | `/api/tokens`, `/api/tokens/:id` | Token cho AI agent: liệt kê / tạo `{ name }` (trả token một lần) / thu hồi |
+| POST | `/api/mcp` | MCP server (streamable HTTP), `Authorization: Bearer <token>` |
 
 Nội dung tối đa khoảng 2 triệu ký tự (body JSON giới hạn 5 MB).
 

@@ -1,5 +1,6 @@
 import clsx from 'clsx'
 import {
+  Bot,
   ChevronRight,
   Compass,
   FileText,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router'
+import { AgentDialog } from './AgentDialog'
 import { DeleteDocButton, revealOnHover } from './DeleteDocButton'
 import type { DocSummary } from '../lib/api'
 import { useAuth } from '../lib/auth'
@@ -42,6 +44,7 @@ export function Sidebar() {
   const { data: docs = [] } = useDocs()
   const [expanded, setExpanded] = useStoredState<string[]>('viewmd.expanded', [])
   const [creatingProject, setCreatingProject] = useState(false)
+  const [connectingAgent, setConnectingAgent] = useState(false)
   const [avatarFailed, setAvatarFailed] = useState(false)
   const location = useLocation()
 
@@ -228,6 +231,9 @@ export function Sidebar() {
             {user?.githubLogin ? `@${user.githubLogin}` : user?.email}
           </div>
         </div>
+        <IconButton label="Connect an AI agent (MCP)" onClick={() => setConnectingAgent(true)}>
+          <Bot />
+        </IconButton>
         <ThemeToggle />
         <IconButton label="Sign out" onClick={logout}>
           <LogOut />
@@ -235,6 +241,7 @@ export function Sidebar() {
       </div>
 
       <ProjectDialog open={creatingProject} onClose={() => setCreatingProject(false)} />
+      <AgentDialog open={connectingAgent} onClose={() => setConnectingAgent(false)} />
     </div>
   )
 }

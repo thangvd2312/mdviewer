@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { DocsModule } from './docs/docs.module';
 import { HealthController } from './health/health.controller';
 import { ProjectsModule } from './projects/projects.module';
+import { McpModule } from './mcp/mcp.module';
 import { PublicModule } from './public/public.module';
 
 @Module({
@@ -35,6 +36,7 @@ import { PublicModule } from './public/public.module';
     AnnotationsModule,
     AssistantModule,
     PublicModule,
+    McpModule,
   ],
   controllers: [HealthController],
 })
