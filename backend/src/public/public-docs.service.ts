@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
 import { Doc } from '../docs/doc.entity';
+import { User } from '../users/user.entity';
 import { Comment } from './comment.entity';
 import { ExploreQuery } from './public.dto';
 
@@ -81,6 +82,7 @@ export class PublicDocsService {
       );
     }
     if (query.author) qb.andWhere('u.githubLogin = :author', { author: query.author });
+    if (query.topic) qb.andWhere('JSON_CONTAINS(d.topics, JSON_QUOTE(:topic))', { topic: query.topic });
 
     if (query.sort === 'popular') qb.orderBy('d.viewCount', 'DESC').addOrderBy('d.publishedAt', 'DESC');
     else qb.orderBy('d.publishedAt', 'DESC');
@@ -93,6 +95,46 @@ export class PublicDocsService {
       items: rows.slice(0, limit).map(toSummary),
       hasMore: rows.length > limit,
     };
+  }
+
+  /** An author's public profile: who they are and what they've published (never their email). */
+  async author(login: string) {
+    const user = await this.docs.manager.findOne(User, {
+      where: { githubLogin: login },
+      select: { id: true, name: true, githubLogin: true, avatarUrl: true, createdAt: true },
+    });
+    if (!user) throw new NotFoundException('There’s no author with that name.');
+    const stats = await this.docs
+      .createQueryBuilder('d')
+      .select('COUNT(*)', 'posts')
+      .addSelect('COALESCE(SUM(d.viewCount), 0)', 'views')
+      .addSelect('MAX(d.publishedAt)', 'lastPublishedAt')
+      .where('d.ownerId = :id AND d.publishedAt IS NOT NULL', { id: user.id })
+      .getRawOne<{ posts: string; views: string; lastPublishedAt: Date | string | null }>();
+    return {
+      ...author(user),
+      joinedAt: user.createdAt.toISOString(),
+      postCount: Number(stats?.posts ?? 0),
+      viewCount: Number(stats?.views ?? 0),
+      lastPublishedAt: stats?.lastPublishedAt ? iso(stats.lastPublishedAt) : null,
+    };
+  }
+
+  /** The most used topics across published docs (for browsing by topic). */
+  async topics(limit = 16) {
+    const rows = await this.docs
+      .createQueryBuilder('d')
+      .select('d.topics', 'topics')
+      .where('d.publishedAt IS NOT NULL AND d.topics IS NOT NULL')
+      .orderBy('d.publishedAt', 'DESC')
+      .limit(2000)
+      .getRawMany<{ topics: unknown }>();
+    const counts = new Map<string, number>();
+    for (const r of rows) for (const t of parseTopics(r.topics)) counts.set(t, (counts.get(t) ?? 0) + 1);
+    return [...counts]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, limit)
+      .map(([name, count]) => ({ name, count }));
   }
 
   /** The published doc behind a slug, with its author. 404 if missing or not public. */

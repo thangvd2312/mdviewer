@@ -1,23 +1,24 @@
-import { Compass, Globe, MessageCircle, Pencil, Share2, Sparkles } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Globe, MessageCircle, Pencil, Share2, Sparkles } from 'lucide-react'
 import { useEffect, useMemo, useRef } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { Avatar } from '../components/Avatar'
+import { BlogFooter } from '../components/blog/BlogLayout'
+import { authorUrl, PostRow, postUrl, Topics } from '../components/blog/Posts'
 import { Comments } from '../components/comments/Comments'
 import { OutlineNav, useActiveHeading, useHeadings } from '../components/DocOutline'
 import { MarkdownView } from '../components/MarkdownView'
-import { PageHeader } from '../components/PublicLayout'
 import { buttonClass, IconButton } from '../components/ui'
 import { ApiError, type PublicDoc } from '../lib/api'
 import { usePageAssistant } from '../lib/assistant'
 import { useAuth } from '../lib/auth'
 import { timeAgo } from '../lib/format'
 import { readingStats, splitLeadingTitle } from '../lib/markdown'
-import { usePublicDoc } from '../lib/queries'
+import { useAuthor, usePublicDoc, usePublicDocs } from '../lib/queries'
 import { useUI } from '../lib/ui'
 import { PageLoading } from './NotFound'
 
-/** A published document, readable by anyone: /s/<slug>. */
-export function PublicDocPage() {
+/** A blog post (a published document), readable by anyone: /blog/<slug>. */
+export function BlogPost() {
   const { slug = '' } = useParams()
   const { user } = useAuth()
   const { toast } = useUI()
@@ -42,7 +43,7 @@ export function PublicDocPage() {
   )
 
   useEffect(() => {
-    if (doc) document.title = `${doc.title} · viewmd`
+    if (doc) document.title = `${doc.title} · viewmd Blog`
     return () => {
       document.title = 'viewmd'
     }
@@ -60,15 +61,10 @@ export function PublicDocPage() {
 
   if (isLoading) return <PageLoading />
   if (error || !doc) {
-    return (
-      <>
-        <PageHeader crumbs={[{ label: 'Explore', to: '/explore' }, { label: 'Not available' }]} />
-        <Unavailable missing={error instanceof ApiError && error.status === 404} />
-      </>
-    )
+    return <Unavailable missing={error instanceof ApiError && error.status === 404} />
   }
 
-  const url = `${window.location.origin}/s/${doc.slug}`
+  const url = `${window.location.origin}${postUrl(doc.slug)}`
   const share = async () => {
     if (navigator.share && matchMedia('(pointer: coarse)').matches) {
       try {
@@ -88,66 +84,126 @@ export function PublicDocPage() {
   const toComments = () => document.getElementById('comments')?.scrollIntoView({ behavior: 'smooth' })
 
   return (
-    <>
-      <PageHeader
-        crumbs={[{ label: 'Explore', to: '/explore' }, { label: doc.title }]}
-        actions={
-          <>
-            <button
-              type="button"
-              onClick={toComments}
-              className={buttonClass('ghost', 'px-2.5')}
-              title="Comments"
-              aria-label={`${doc.commentCount} comments`}
+    <div ref={scrollRef} className="flex-1 overflow-y-auto">
+      <div className="flex justify-center gap-12 px-5 pt-5 pb-20 md:px-10 md:pt-8">
+        <article ref={articleRef} className="w-full max-w-[720px] min-w-0">
+          <div className="mb-6 flex items-center gap-1">
+            <Link
+              to="/blog"
+              className="-ml-2 flex h-9 items-center gap-1.5 rounded-full px-2 text-[13.5px] text-ink-muted transition hover:bg-hover hover:text-ink"
             >
-              <MessageCircle className="size-4" />
-              {doc.commentCount > 0 && doc.commentCount}
-            </button>
-            <IconButton label="Share" onClick={share}>
-              <Share2 />
-            </IconButton>
-            {doc.isOwner && (
-              <Link to={`/d/${doc.id}`} className={buttonClass('ghost', 'max-sm:px-2')} title="Open in your library">
-                <Pencil className="size-3.5" /> <span className="max-sm:hidden">Edit</span>
-              </Link>
-            )}
-          </>
-        }
-      />
-
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="flex justify-center gap-12 px-5 pt-6 pb-32 md:px-10 md:pt-10">
-          <article ref={articleRef} className="w-full max-w-[720px] min-w-0">
-            {doc.isOwner && <OwnerNotice doc={doc} />}
-            <div className="markdown">
-              <h1>{title || doc.title}</h1>
-            </div>
-            <Byline doc={doc} />
-            <MarkdownView content={body} />
-
-            <div className="mt-12 flex flex-wrap items-center gap-2">
-              <button type="button" onClick={share} className={buttonClass('secondary', 'h-9 rounded-full px-4')}>
-                <Share2 className="size-4" /> Share
+              <ArrowLeft className="size-4" /> All posts
+            </Link>
+            <div className="ml-auto flex items-center gap-0.5">
+              <button
+                type="button"
+                onClick={toComments}
+                className={buttonClass('ghost', 'h-9 rounded-full px-3')}
+                aria-label={`${doc.commentCount} comments`}
+                title="Comments"
+              >
+                <MessageCircle className="size-4" />
+                {doc.commentCount > 0 && doc.commentCount}
               </button>
-              <Link to="/explore" className={buttonClass('ghost', 'h-9 rounded-full px-4')}>
-                <Compass className="size-4" /> More on Explore
-              </Link>
+              <IconButton label="Share" onClick={share} className="size-9 rounded-full">
+                <Share2 />
+              </IconButton>
+              {doc.isOwner && (
+                <Link
+                  to={`/d/${doc.id}`}
+                  className={buttonClass('ghost', 'h-9 rounded-full px-3')}
+                  title="Open in your notes"
+                >
+                  <Pencil className="size-3.5" /> <span className="max-sm:hidden">Edit</span>
+                </Link>
+              )}
             </div>
+          </div>
 
-            {!user && <SignInCard />}
+          {doc.isOwner && <OwnerNotice doc={doc} />}
+          <div className="markdown">
+            <h1>{title || doc.title}</h1>
+          </div>
+          <Byline doc={doc} />
+          <MarkdownView content={body} />
 
-            <Comments slug={doc.slug} />
-          </article>
-          {headings.length > 1 && (
-            <aside className="hidden w-56 shrink-0 xl:block">
-              <div className="sticky top-2">
-                <OutlineNav headings={headings} active={activeId} />
+          <div className="mt-12 flex flex-wrap items-center gap-2 border-t border-line pt-6">
+            {doc.topics.length > 0 && (
+              <div className="mr-auto">
+                <Topics topics={doc.topics} size="md" />
               </div>
-            </aside>
+            )}
+            <button type="button" onClick={share} className={buttonClass('secondary', 'h-9 rounded-full px-4')}>
+              <Share2 className="size-4" /> Share
+            </button>
+          </div>
+
+          <AboutAuthor doc={doc} />
+          {!user && <SignInCard />}
+          <Comments slug={doc.slug} />
+        </article>
+        {headings.length > 1 && (
+          <aside className="hidden w-56 shrink-0 xl:block">
+            <div className="sticky top-6">
+              <OutlineNav headings={headings} active={activeId} />
+            </div>
+          </aside>
+        )}
+      </div>
+      <BlogFooter />
+    </div>
+  )
+}
+
+/** "Written by" with the author's other posts. */
+function AboutAuthor({ doc }: { doc: PublicDoc }) {
+  const login = doc.author.login ?? undefined
+  const profile = useAuthor(login)
+  const others = usePublicDocs({ author: login, limit: 4 }, Boolean(login))
+  const more = (others.data?.items ?? []).filter((d) => d.slug !== doc.slug).slice(0, 3)
+  return (
+    <section className="mt-10 rounded-2xl border border-line p-5 sm:p-6">
+      <div className="flex items-center gap-4">
+        <Avatar name={doc.author.name} src={doc.author.avatarUrl} className="size-14" initialsClass="text-[18px]" />
+        <div className="min-w-0 flex-1">
+          <div className="text-[12px] font-medium tracking-wide text-ink-faint uppercase">Written by</div>
+          <div className="truncate text-[17px] font-semibold">{doc.author.name}</div>
+          {profile.data && (
+            <div className="text-[13px] text-ink-muted">
+              {profile.data.postCount} {profile.data.postCount === 1 ? 'post' : 'posts'} ·{' '}
+              {new Intl.NumberFormat('en', { notation: 'compact' }).format(profile.data.viewCount)} views
+            </div>
           )}
         </div>
+        {login && (
+          <Link
+            to={authorUrl(login)}
+            className={buttonClass('secondary', 'h-9 shrink-0 rounded-full px-4 max-sm:hidden')}
+          >
+            Profile <ArrowRight className="size-4" />
+          </Link>
+        )}
       </div>
-    </>
+      {more.length > 0 && (
+        <div className="mt-5 border-t border-line pt-2">
+          <div className="pt-3 text-[12px] font-semibold tracking-wide text-ink-faint uppercase">
+            More from {doc.author.name}
+          </div>
+          <ul className="divide-y divide-line">
+            {more.map((d) => (
+              <li key={d.slug}>
+                <PostRow doc={d} hideAuthor />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {login && (
+        <Link to={authorUrl(login)} className={buttonClass('secondary', 'mt-4 h-10 w-full rounded-full sm:hidden')}>
+          See all posts by {doc.author.name}
+        </Link>
+      )}
+    </section>
   )
 }
 
@@ -162,9 +218,9 @@ function Byline({ doc }: { doc: PublicDoc }) {
       <div className="min-w-0 leading-snug">
         {author.login ? (
           <Link
-            to={`/explore?author=${encodeURIComponent(author.login)}`}
+            to={authorUrl(author.login)}
             className="block truncate text-[14px] font-semibold hover:underline"
-            title={`More from @${author.login}`}
+            title={`${author.name}’s profile`}
           >
             {author.name}
           </Link>
@@ -205,7 +261,7 @@ function OwnerNotice({ doc }: { doc: PublicDoc }) {
     <div className="mb-6 flex items-center gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.07] px-3.5 py-2.5 text-[13px]">
       <Globe className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
       <span className="min-w-0 flex-1 text-ink-muted">
-        This is your page — <span className="font-medium text-ink">it’s public</span>. Your sticky notes stay private.
+        This is your post — <span className="font-medium text-ink">it’s public</span>. Your sticky notes stay private.
       </span>
       <Link to={`/d/${doc.id}?share=1`} className="shrink-0 font-medium text-ink underline underline-offset-2">
         Settings
@@ -252,8 +308,8 @@ function Unavailable({ missing }: { missing: boolean }) {
           ? 'The link may be wrong, or the author stopped sharing it.'
           : 'Check your connection and try again in a moment.'}
       </p>
-      <Link to="/explore" className={buttonClass('primary', 'mt-6 h-10 rounded-full px-5')}>
-        <Compass className="size-4" /> Browse Explore
+      <Link to="/blog" className={buttonClass('primary', 'mt-6 h-10 rounded-full px-5')}>
+        Browse the blog <ArrowRight className="size-4" />
       </Link>
     </div>
   )

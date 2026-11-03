@@ -367,10 +367,7 @@ function SingleComment({
         <div className="flex min-h-7 items-center gap-1">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[13px] leading-tight">
             {c.author.kind === 'user' && c.author.login ? (
-              <Link
-                to={`/explore?author=${encodeURIComponent(c.author.login)}`}
-                className="truncate font-semibold hover:underline"
-              >
+              <Link to={`/u/${encodeURIComponent(c.author.login)}`} className="truncate font-semibold hover:underline">
                 {name}
               </Link>
             ) : (

@@ -10,6 +10,7 @@ import {
   Post,
   Put,
   Query,
+  NotFoundException,
   Req,
   UnauthorizedException,
   UseGuards,
@@ -49,6 +50,19 @@ export class PublicController {
   @Get('docs')
   list(@Query() query: ExploreQuery) {
     return this.docs.list(query);
+  }
+
+  /** An author's profile (their docs: `GET /public/docs?author=<login>`). */
+  @Get('authors/:login')
+  author(@Param('login') login: string) {
+    if (!/^[A-Za-z0-9-]{1,100}$/.test(login)) throw new NotFoundException('There’s no author with that name.');
+    return this.docs.author(login);
+  }
+
+  /** The most used topics across published docs. */
+  @Get('topics')
+  topics() {
+    return this.docs.topics();
   }
 
   @Get('docs/:slug')

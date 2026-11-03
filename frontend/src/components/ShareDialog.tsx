@@ -9,13 +9,13 @@ import { Avatar } from './Avatar'
 import { useUI } from '../lib/ui'
 import { Button, buttonClass, Modal, Switch } from './ui'
 
-/** Publish a document to the web (its own link + Explore), and choose whether readers can comment. */
+/** Publish a document to the web (its own link on the blog), and choose whether readers can comment. */
 export function ShareDialog({ doc, open, onClose }: { doc: Doc; open: boolean; onClose: () => void }) {
   const { toast } = useUI()
   const sharing = useSetSharing()
   const [copied, setCopied] = useState(false)
   const isPublic = Boolean(doc.publishedAt)
-  const url = doc.slug ? `${window.location.origin}/s/${doc.slug}` : null
+  const url = doc.slug ? `${window.location.origin}/blog/${doc.slug}` : null
 
   // Taps while a change is saving are ignored (the switch isn't disabled: that would drop keyboard focus).
   const update = async (input: { public?: boolean; allowComments?: boolean }) => {
@@ -56,7 +56,7 @@ export function ShareDialog({ doc, open, onClose }: { doc: Doc; open: boolean; o
             <div className="text-[14px] font-medium">{isPublic ? 'Public on the web' : 'Private'}</div>
             <p className="text-[13px] leading-snug text-ink-muted">
               {isPublic
-                ? 'Anyone with the link can read it, and it’s listed on Explore.'
+                ? 'Anyone can read it — it’s on the blog, with its own link.'
                 : 'Only you can see it. Publish to give it a link anyone can open.'}
             </p>
           </div>

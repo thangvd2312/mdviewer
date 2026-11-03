@@ -279,7 +279,7 @@ function DocMeta({ doc, project }: { doc: Doc; project?: Project }) {
       {doc.publishedAt && doc.slug && (
         <>
           <Link
-            to={`/s/${doc.slug}`}
+            to={`/blog/${doc.slug}`}
             className="flex items-center gap-1 rounded-md bg-emerald-500/10 px-1.5 py-0.5 font-medium text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-400"
             title="Open the public page"
           >

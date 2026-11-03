@@ -27,7 +27,7 @@ export const keys = {
 
 const EXPLORE_PAGE = 20
 
-/** Published docs for Explore, a page at a time. */
+/** Published docs for the blog, a page at a time. */
 export const useExplore = (q: Omit<ExploreQuery, 'offset' | 'limit'>) =>
   useInfiniteQuery({
     queryKey: keys.explore(q),
@@ -36,6 +36,16 @@ export const useExplore = (q: Omit<ExploreQuery, 'offset' | 'limit'>) =>
     getNextPageParam: (last, pages) => (last.hasMore ? pages.length * EXPLORE_PAGE : undefined),
     placeholderData: (prev) => prev,
   })
+
+/** A few published docs (no paging): "Most read", "More from this author". */
+export const usePublicDocs = (q: ExploreQuery, enabled = true) =>
+  useQuery({ queryKey: ['explore', 'short', q], enabled, queryFn: () => api.public.list(q), staleTime: 60_000 })
+
+export const useAuthor = (login: string | undefined) =>
+  useQuery({ queryKey: ['public', 'author', login], enabled: Boolean(login), queryFn: () => api.public.author(login!) })
+
+export const useTopics = () =>
+  useQuery({ queryKey: ['public', 'topics'], queryFn: api.public.topics, staleTime: 5 * 60_000 })
 
 export const usePublicDoc = (slug: string | undefined) =>
   useQuery({ queryKey: keys.publicDoc(slug ?? ''), enabled: Boolean(slug), queryFn: () => api.public.get(slug!) })

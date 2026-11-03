@@ -73,10 +73,10 @@ export function LoginPage() {
             unless you choose to publish them.
           </p>
           <Link
-            to="/explore"
+            to="/blog"
             className="mt-6 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-ink-muted hover:text-ink"
           >
-            Or browse what people have shared →
+            Or read the blog — no account needed →
           </Link>
         </div>
       </div>

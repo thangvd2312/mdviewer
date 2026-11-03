@@ -93,9 +93,9 @@ export function Sidebar() {
           <SquarePen className="size-4 text-ink-muted" />
           New note
         </NavLink>
-        <NavLink to="/explore" className={rowClass}>
+        <NavLink to="/blog" className={rowClass}>
           <Compass className="size-4 text-ink-muted" />
-          Explore
+          Blog
         </NavLink>
 
         <Section

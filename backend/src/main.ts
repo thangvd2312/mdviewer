@@ -49,38 +49,57 @@ function serveFrontend(app: NestExpressApplication, webDist: string, siteUrl: st
   app.use((req: Request, res: Response, next: NextFunction) => {
     if ((req.method !== 'GET' && req.method !== 'HEAD') || req.path.startsWith('/api')) return next();
     res.setHeader('Cache-Control', 'no-cache');
-    // Shared links (/s/<slug>, /explore) get a real title and description, so chat apps and
-    // search engines show a proper preview without running the app.
-    const slug = req.path.match(/^\/s\/([^/]+)\/?$/)?.[1];
+    const query = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    // Old addresses of the blog keep working (and pass their ranking on to the new ones).
+    if (req.path === '/explore') return res.redirect(301, `/blog${query}`);
+    const oldSlug = req.path.match(/^\/s\/([^/]+)\/?$/)?.[1];
+    if (oldSlug && SLUG_PATTERN.test(oldSlug)) return res.redirect(301, `/blog/${oldSlug}${query}`);
+
+    // Blog pages get a real title and description, so chat apps and search engines show a proper
+    // preview without running the app.
+    const page = (meta: PageMeta) => res.type('html').send(withMeta(template, meta));
+    const image = `${siteUrl}/apple-touch-icon.png`;
+    if (req.path === '/blog' || req.path === '/blog/') {
+      return page({
+        title: 'viewmd Blog',
+        description: 'Notes, guides and docs people have shared on viewmd — free to read.',
+        url: `${siteUrl}/blog`,
+        image,
+        type: 'website',
+      });
+    }
+    const slug = req.path.match(/^\/blog\/([^/]+)\/?$/)?.[1];
     if (slug && SLUG_PATTERN.test(slug)) {
       publicDocs
         .meta(slug)
         .then((meta) =>
-          res.type('html').send(
-            meta
-              ? withMeta(template, {
-                  title: `${meta.title} · viewmd`,
-                  description: meta.description || `Shared by ${meta.author} on viewmd`,
-                  url: `${siteUrl}/s/${slug}`,
-                  image: `${siteUrl}/apple-touch-icon.png`,
-                  type: 'article',
-                })
-              : template,
-          ),
+          meta
+            ? page({
+                title: `${meta.title} · viewmd Blog`,
+                description: meta.description || `Written by ${meta.author} on viewmd`,
+                url: `${siteUrl}/blog/${slug}`,
+                image,
+                type: 'article',
+              })
+            : res.type('html').send(template),
         )
         .catch(next);
       return;
     }
-    if (req.path === '/explore') {
-      res.type('html').send(
-        withMeta(template, {
-          title: 'Explore · viewmd',
-          description: 'Notes, guides and documentation people have shared on viewmd.',
-          url: `${siteUrl}/explore`,
-          image: `${siteUrl}/apple-touch-icon.png`,
-          type: 'website',
-        }),
-      );
+    const login = req.path.match(/^\/u\/([A-Za-z0-9-]{1,100})\/?$/)?.[1];
+    if (login) {
+      publicDocs
+        .author(login)
+        .then((a) =>
+          page({
+            title: `${a.name} · viewmd Blog`,
+            description: `${a.postCount} ${a.postCount === 1 ? 'post' : 'posts'} by ${a.name}${a.login ? ` (@${a.login})` : ''} on viewmd.`,
+            url: `${siteUrl}/u/${login}`,
+            image: a.avatarUrl ?? image,
+            type: 'website',
+          }),
+        )
+        .catch(() => res.type('html').send(template));
       return;
     }
     res.sendFile(indexHtml);

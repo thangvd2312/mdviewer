@@ -35,6 +35,13 @@ export class ExploreQuery {
   @MaxLength(100)
   author?: string;
 
+  /** Only docs that list this topic (one of their main section headings). */
+  @Transform(trim)
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  topic?: string;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

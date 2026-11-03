@@ -41,7 +41,7 @@ export interface PublicAuthor {
   avatarUrl: string | null
 }
 
-/** A published doc as listed on Explore. */
+/** A published doc as listed on the blog. */
 export interface PublicDocSummary {
   slug: string
   title: string
@@ -65,10 +65,19 @@ export interface PublicDoc extends PublicDocSummary {
   isOwner: boolean
 }
 
+/** An author's public profile. */
+export interface AuthorProfile extends PublicAuthor {
+  joinedAt: string
+  postCount: number
+  viewCount: number
+  lastPublishedAt: string | null
+}
+
 export interface ExploreQuery {
   q?: string
   sort?: 'latest' | 'popular'
   author?: string
+  topic?: string
   offset?: number
   limit?: number
 }
@@ -328,6 +337,8 @@ export const api = {
     list: (q: ExploreQuery) =>
       request<{ items: PublicDocSummary[]; hasMore: boolean }>('GET', '/public/docs' + qs({ ...q })),
     get: (slug: string) => request<PublicDoc>('GET', `/public/docs/${encodeURIComponent(slug)}`),
+    author: (login: string) => request<AuthorProfile>('GET', `/public/authors/${encodeURIComponent(login)}`),
+    topics: () => request<{ name: string; count: number }[]>('GET', '/public/topics'),
     comments: (slug: string, before?: string) =>
       request<CommentPage>('GET', `/public/docs/${encodeURIComponent(slug)}/comments` + qs({ before })),
     replies: (commentId: string, after?: string) =>

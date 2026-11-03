@@ -19,12 +19,15 @@ export function Avatar({
   src,
   className = 'size-8',
   muted,
+  initialsClass = 'text-[11px]',
 }: {
   name: string
   src?: string | null
   className?: string
   /** Grey placeholder (guests, deleted accounts). */
   muted?: boolean
+  /** Font size of the initials (for large avatars). */
+  initialsClass?: string
 }) {
   const [failed, setFailed] = useState(false)
   if (src && !failed) {
@@ -48,7 +51,7 @@ export function Avatar({
         className,
       )}
     >
-      <span className="text-[11px]">{initials(name) || '?'}</span>
+      <span className={initialsClass}>{initials(name) || '?'}</span>
     </span>
   )
 }
