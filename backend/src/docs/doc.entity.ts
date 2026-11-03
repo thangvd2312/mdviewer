@@ -1,4 +1,13 @@
-import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Relation } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+  Relation,
+} from 'typeorm';
 import { Project } from '../projects/project.entity';
 import { User } from '../users/user.entity';
 
@@ -61,6 +70,14 @@ export class Doc {
   /** Whether readers may comment while it's public. */
   @Column({ default: true })
   allowComments: boolean;
+
+  /** Words of prose (for reading time), derived from content on save. */
+  @Column({ type: 'int', unsigned: true, default: 0 })
+  wordCount: number;
+
+  /** Main section headings (what the doc covers), derived from content on save; shown on Explore. */
+  @Column({ type: 'json', nullable: true })
+  topics: string[] | null;
 
   /** Public page views (deduplicated per reader for a while; the author's own views don't count). */
   @Column({ type: 'int', unsigned: true, default: 0 })

@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Eye, MessageCircle, Search, X } from 'lucide-react'
+import { Clock, Compass, Eye, MessageCircle, Search, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { Avatar } from '../components/Avatar'
@@ -74,28 +74,22 @@ export function ExplorePage() {
 
   usePageAssistant(user ? { context: { page: 'other' }, title: 'Explore' } : null)
 
+  // The newest doc is shown large — only on the plain, unfiltered list.
+  const featureFirst = sort === 'latest' && !q && !author
+
   return (
     <>
       <PageHeader crumbs={[{ label: 'Explore' }]} />
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-3xl px-4 pt-8 pb-24 sm:px-8 sm:pt-12">
-          <h1 className="text-[26px] font-semibold tracking-tight sm:text-[30px]">Explore</h1>
-          <p className="mt-1 text-[14.5px] text-ink-muted">Notes, guides and docs people have shared.</p>
-
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <label className="relative flex-1">
-              <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-ink-faint" />
-              <input
-                type="search"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder="Search titles and summaries"
-                enterKeyHint="search"
-                aria-label="Search"
-                className="h-11 w-full rounded-xl border border-line bg-surface pr-3 pl-10 text-[16px] outline-none transition placeholder:text-ink-faint focus:border-ink-faint focus:ring-4 focus:ring-hover sm:h-10 sm:text-[14px]"
-              />
-            </label>
-            <div role="tablist" aria-label="Sort" className="flex shrink-0 rounded-xl bg-hover p-1">
+        <div className="mx-auto w-full max-w-5xl px-4 pt-6 pb-24 sm:px-8 sm:pt-12">
+          <div className="flex items-end justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="text-[26px] leading-tight font-semibold tracking-tight sm:text-[34px]">Explore</h1>
+              <p className="mt-1 text-[14px] text-ink-muted sm:text-[15px]">
+                Notes, guides and docs people have shared<span className="max-sm:hidden"> — free to read</span>.
+              </p>
+            </div>
+            <div role="tablist" aria-label="Sort" className="inline-flex shrink-0 rounded-full bg-hover p-1">
               {(['latest', 'popular'] as const).map((s) => (
                 <button
                   key={s}
@@ -104,7 +98,7 @@ export function ExplorePage() {
                   aria-selected={sort === s}
                   onClick={() => set('sort', s === 'latest' ? null : s)}
                   className={clsx(
-                    'h-9 flex-1 rounded-lg px-4 text-[13.5px] font-medium transition sm:h-8',
+                    'h-8 rounded-full px-3.5 text-[13.5px] font-medium whitespace-nowrap transition sm:px-4',
                     sort === s ? 'bg-surface text-ink shadow-sm' : 'text-ink-muted hover:text-ink',
                   )}
                 >
@@ -114,24 +108,35 @@ export function ExplorePage() {
             </div>
           </div>
 
+          <label className="relative mt-5 block sm:mt-6">
+            <Search className="pointer-events-none absolute top-1/2 left-4 size-[18px] -translate-y-1/2 text-ink-faint" />
+            <input
+              type="search"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Search titles and summaries"
+              enterKeyHint="search"
+              aria-label="Search"
+              className="h-12 w-full rounded-2xl border border-line bg-surface pr-4 pl-11 text-[16px] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition outline-none placeholder:text-ink-faint focus:border-ink-faint focus:ring-4 focus:ring-hover sm:text-[15px]"
+            />
+          </label>
+
           {author && (
-            <div className="mt-3 flex">
-              <button
-                type="button"
-                onClick={() => set('author', null)}
-                className="inline-flex h-8 items-center gap-1.5 rounded-full bg-hover pr-2 pl-3 text-[13px]"
-              >
-                By @{author}
-                <X className="size-3.5 text-ink-muted" aria-label="Show everyone" />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => set('author', null)}
+              className="mt-3 inline-flex h-10 items-center gap-1.5 rounded-full border border-line pr-2.5 pl-3.5 text-[13px] text-ink-muted hover:text-ink"
+            >
+              By <span className="font-medium text-ink">@{author}</span>
+              <X className="size-3.5" aria-label="Show everyone" />
+            </button>
           )}
 
           <div className="mt-6">
             {explore.isPending ? (
-              <ListSkeleton />
+              <CardsSkeleton />
             ) : explore.isError ? (
-              <div className="rounded-2xl border border-line px-5 py-8 text-center text-[14px] text-ink-muted">
+              <div className="rounded-2xl border border-line px-5 py-10 text-center text-[14px] text-ink-muted">
                 Couldn’t load the list.{' '}
                 <button type="button" className="font-medium text-ink underline" onClick={() => explore.refetch()}>
                   Try again
@@ -141,24 +146,29 @@ export function ExplorePage() {
               <Empty searching={Boolean(q || author)} signedIn={Boolean(user)} />
             ) : (
               <ul
-                className={clsx('divide-y divide-line transition-opacity', explore.isPlaceholderData && 'opacity-60')}
+                className={clsx(
+                  'grid gap-4 transition-opacity sm:grid-cols-2',
+                  explore.isPlaceholderData && 'opacity-60',
+                )}
               >
-                {items.map((d) => (
-                  <li key={d.slug}>
-                    <ExploreItem doc={d} onAuthor={(login) => set('author', login)} />
+                {items.map((d, i) => (
+                  <li key={d.slug} className={clsx('flex', featureFirst && i === 0 && 'sm:col-span-2')}>
+                    <DocCard doc={d} featured={featureFirst && i === 0} onAuthor={(login) => set('author', login)} />
                   </li>
                 ))}
               </ul>
             )}
             <div ref={sentinel} />
             {isFetchingNextPage && (
-              <div className="flex justify-center py-6">
+              <div className="flex justify-center py-8">
                 <Spinner />
               </div>
             )}
             {hasNextPage && !isFetchingNextPage && (
-              <div className="flex justify-center py-6">
-                <Button onClick={() => fetchNextPage()}>Load more</Button>
+              <div className="flex justify-center py-8">
+                <Button className="h-10 rounded-full px-5" onClick={() => fetchNextPage()}>
+                  Load more
+                </Button>
               </div>
             )}
           </div>
@@ -168,39 +178,104 @@ export function ExplorePage() {
   )
 }
 
-function ExploreItem({ doc, onAuthor }: { doc: PublicDocSummary; onAuthor: (login: string) => void }) {
+/** One published doc. The whole card opens it; the author name filters by author. */
+function DocCard({
+  doc,
+  featured,
+  onAuthor,
+}: {
+  doc: PublicDocSummary
+  featured: boolean
+  onAuthor: (login: string) => void
+}) {
+  const topics = doc.topics.slice(0, featured ? 4 : 3)
   return (
-    <article className="group relative py-5">
-      <Link to={`/s/${doc.slug}`} className="block">
-        <h2 className="line-clamp-2 text-[17px] leading-snug font-semibold tracking-tight group-hover:underline group-hover:decoration-ink-faint group-hover:underline-offset-4 sm:text-[18px]">
-          {doc.title}
-        </h2>
-        {doc.excerpt && <p className="mt-1.5 line-clamp-2 text-[14px] leading-relaxed text-ink-muted">{doc.excerpt}</p>}
-      </Link>
-      <div className="mt-3 flex min-w-0 items-center gap-2 text-[12.5px] text-ink-faint">
+    <article
+      className={clsx(
+        'group relative flex w-full flex-col rounded-2xl border border-line bg-surface transition duration-200',
+        'hover:-translate-y-0.5 hover:border-ink-faint/40 hover:shadow-[0_14px_34px_-16px_rgba(0,0,0,0.22)]',
+        'focus-within:border-ink-faint/60 focus-within:ring-4 focus-within:ring-hover',
+        featured ? 'p-5 sm:p-7' : 'p-5',
+      )}
+    >
+      <div className="flex min-w-0 items-center gap-2 text-[12.5px]">
         <button
           type="button"
           onClick={() => doc.author.login && onAuthor(doc.author.login)}
           disabled={!doc.author.login}
-          className="flex min-w-0 items-center gap-1.5 rounded-full text-ink-muted hover:text-ink"
           title={doc.author.login ? `More from @${doc.author.login}` : undefined}
+          className="relative z-10 flex min-w-0 items-center gap-2 rounded-full text-ink-muted transition hover:text-ink"
         >
-          <Avatar name={doc.author.name} src={doc.author.avatarUrl} className="size-5" />
+          <Avatar name={doc.author.name} src={doc.author.avatarUrl} className="size-6" />
           <span className="truncate font-medium">{doc.author.name}</span>
         </button>
-        <span aria-hidden>·</span>
-        <time dateTime={doc.publishedAt} title={new Date(doc.publishedAt).toLocaleString()} className="shrink-0">
+        <span aria-hidden className="text-ink-faint">
+          ·
+        </span>
+        <time
+          dateTime={doc.publishedAt}
+          title={new Date(doc.publishedAt).toLocaleString()}
+          className="shrink-0 text-ink-faint"
+        >
           {timeAgo(doc.publishedAt)}
         </time>
-        <span className="ml-auto flex shrink-0 items-center gap-3">
-          {doc.commentCount > 0 && (
-            <span className="flex items-center gap-1" title={`${doc.commentCount} comments`}>
-              <MessageCircle className="size-3.5" /> {doc.commentCount}
-            </span>
-          )}
-          <span className="flex items-center gap-1" title={`${doc.viewCount} views`}>
-            <Eye className="size-3.5" /> {compact(doc.viewCount)}
+        {featured && (
+          <span className="ml-auto shrink-0 rounded-full bg-accent/10 px-2.5 py-0.5 text-[11.5px] font-medium text-accent">
+            New
           </span>
+        )}
+      </div>
+
+      <h2
+        className={clsx(
+          'mt-3 leading-snug font-semibold tracking-tight text-ink',
+          featured ? 'line-clamp-3 text-[19px] sm:text-[26px]' : 'line-clamp-2 text-[17px]',
+        )}
+      >
+        {/* The link covers the whole card (::after), keeping one clear target for keyboards and screen readers. */}
+        <Link to={`/s/${doc.slug}`} className="outline-none after:absolute after:inset-0 after:rounded-2xl">
+          {doc.title}
+        </Link>
+      </h2>
+
+      {doc.excerpt && (
+        <p
+          className={clsx(
+            'mt-2 line-clamp-3 leading-relaxed text-ink-muted',
+            featured ? 'max-w-3xl text-[15px]' : 'text-[14px]',
+          )}
+        >
+          {doc.excerpt}
+        </p>
+      )}
+
+      {topics.length > 0 && (
+        <ul aria-label="Covers" className="mt-4 flex flex-wrap gap-1.5">
+          {topics.map((t) => (
+            <li
+              key={t}
+              className="max-w-full truncate rounded-full border border-line bg-raised px-2.5 py-1 text-[12px] text-ink-muted"
+            >
+              {t}
+            </li>
+          ))}
+          {doc.topics.length > topics.length && (
+            <li className="px-1 py-1 text-[12px] text-ink-faint">+{doc.topics.length - topics.length} more</li>
+          )}
+        </ul>
+      )}
+
+      <div className="mt-auto flex items-center gap-4 pt-5 text-[12.5px] text-ink-faint">
+        <span className="flex items-center gap-1.5">
+          <Clock className="size-3.5" /> {doc.readMinutes} min read
+        </span>
+        {doc.commentCount > 0 && (
+          <span className="flex items-center gap-1.5" title={`${doc.commentCount} comments`}>
+            <MessageCircle className="size-3.5" /> {doc.commentCount}
+          </span>
+        )}
+        <span className="ml-auto flex items-center gap-1.5" title={`${doc.viewCount} views`}>
+          <Eye className="size-3.5" /> {compact(doc.viewCount)}
         </span>
       </div>
     </article>
@@ -209,14 +284,15 @@ function ExploreItem({ doc, onAuthor }: { doc: PublicDocSummary; onAuthor: (logi
 
 const compact = (n: number) => new Intl.NumberFormat('en', { notation: 'compact' }).format(n)
 
-function ListSkeleton() {
+function CardsSkeleton() {
   return (
-    <div className="divide-y divide-line" aria-label="Loading">
+    <div className="grid gap-4 sm:grid-cols-2" aria-label="Loading">
       {[0, 1, 2, 3].map((i) => (
-        <div key={i} className="space-y-2.5 py-5">
-          <div className="h-5 w-3/4 animate-pulse rounded bg-hover" />
+        <div key={i} className={clsx('space-y-3 rounded-2xl border border-line p-5', i === 0 && 'sm:col-span-2')}>
+          <div className="h-4 w-32 animate-pulse rounded bg-hover" />
+          <div className="h-6 w-3/4 animate-pulse rounded bg-hover" />
           <div className="h-4 w-full animate-pulse rounded bg-hover" />
-          <div className="h-4 w-1/2 animate-pulse rounded bg-hover" />
+          <div className="h-4 w-2/3 animate-pulse rounded bg-hover" />
         </div>
       ))}
     </div>
@@ -225,8 +301,9 @@ function ListSkeleton() {
 
 function Empty({ searching, signedIn }: { searching: boolean; signedIn: boolean }) {
   return (
-    <div className="rounded-2xl border border-dashed border-line px-6 py-12 text-center">
-      <p className="text-[15px] font-medium">{searching ? 'Nothing matches that.' : 'Nothing published yet.'}</p>
+    <div className="flex flex-col items-center rounded-2xl border border-dashed border-line px-6 py-14 text-center">
+      <Compass className="size-9 text-ink-faint" strokeWidth={1.5} />
+      <p className="mt-3 text-[15px] font-medium">{searching ? 'Nothing matches that.' : 'Nothing published yet.'}</p>
       <p className="mx-auto mt-1 max-w-sm text-[13.5px] text-ink-muted">
         {searching
           ? 'Try other words, or clear the filters.'

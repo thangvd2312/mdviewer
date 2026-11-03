@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Brackets, Repository } from "typeorm";
-import { Doc } from "../docs/doc.entity";
-import { Comment } from "./comment.entity";
-import { ExploreQuery } from "./public.dto";
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Brackets, Repository } from 'typeorm';
+import { Doc } from '../docs/doc.entity';
+import { Comment } from './comment.entity';
+import { ExploreQuery } from './public.dto';
 
 export interface PublicAuthor {
   name: string;
@@ -19,6 +19,9 @@ export interface PublicDocSummary {
   updatedAt: string;
   viewCount: number;
   commentCount: number;
+  /** Main section headings. */
+  topics: string[];
+  readMinutes: number;
   author: PublicAuthor;
 }
 
@@ -33,7 +36,7 @@ const VIEW_DEDUPE_MS = 6 * 3600_000;
 const BOT_UA =
   /bot\b|bot\/|crawl|spider|slurp|facebookexternalhit|embedly|WhatsApp\/|curl\/|wget|python-|httpclient|axios|node-fetch|headless/i;
 
-const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => "\\" + c);
+const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => '\\' + c);
 
 /** Published documents as the public sees them: Explore, the reading page, link previews. */
 @Injectable()
@@ -42,53 +45,45 @@ export class PublicDocsService {
 
   constructor(@InjectRepository(Doc) private readonly docs: Repository<Doc>) {}
 
-  async list(
-    query: ExploreQuery,
-  ): Promise<{ items: PublicDocSummary[]; hasMore: boolean }> {
+  async list(query: ExploreQuery): Promise<{ items: PublicDocSummary[]; hasMore: boolean }> {
     const limit = query.limit ?? 20;
     const qb = this.docs
-      .createQueryBuilder("d")
-      .innerJoin("d.owner", "u")
+      .createQueryBuilder('d')
+      .innerJoin('d.owner', 'u')
       .select([
-        "d.slug AS slug",
-        "d.title AS title",
-        "d.excerpt AS excerpt",
-        "d.publishedAt AS publishedAt",
-        "d.updatedAt AS updatedAt",
-        "d.viewCount AS viewCount",
-        "u.name AS authorName",
-        "u.githubLogin AS authorLogin",
-        "u.avatarUrl AS authorAvatar",
+        'd.slug AS slug',
+        'd.title AS title',
+        'd.excerpt AS excerpt',
+        'd.publishedAt AS publishedAt',
+        'd.updatedAt AS updatedAt',
+        'd.viewCount AS viewCount',
+        'd.wordCount AS wordCount',
+        'd.topics AS topics',
+        'u.name AS authorName',
+        'u.githubLogin AS authorLogin',
+        'u.avatarUrl AS authorAvatar',
       ])
       .addSelect(
         (sub) =>
           sub
-            .select("COUNT(*)")
-            .from(Comment, "c")
-            .leftJoin(Comment, "p", "p.id = c.parentId")
-            .where(
-              "c.docId = d.id AND c.deletedAt IS NULL AND c.hiddenAt IS NULL AND p.hiddenAt IS NULL",
-            ),
-        "commentCount",
+            .select('COUNT(*)')
+            .from(Comment, 'c')
+            .leftJoin(Comment, 'p', 'p.id = c.parentId')
+            .where('c.docId = d.id AND c.deletedAt IS NULL AND c.hiddenAt IS NULL AND p.hiddenAt IS NULL'),
+        'commentCount',
       )
-      .where("d.publishedAt IS NOT NULL");
+      .where('d.publishedAt IS NOT NULL');
 
     if (query.q) {
       const like = `%${escapeLike(query.q)}%`;
       qb.andWhere(
-        new Brackets((w) =>
-          w
-            .where("d.title LIKE :like", { like })
-            .orWhere("d.excerpt LIKE :like", { like }),
-        ),
+        new Brackets((w) => w.where('d.title LIKE :like', { like }).orWhere('d.excerpt LIKE :like', { like })),
       );
     }
-    if (query.author)
-      qb.andWhere("u.githubLogin = :author", { author: query.author });
+    if (query.author) qb.andWhere('u.githubLogin = :author', { author: query.author });
 
-    if (query.sort === "popular")
-      qb.orderBy("d.viewCount", "DESC").addOrderBy("d.publishedAt", "DESC");
-    else qb.orderBy("d.publishedAt", "DESC");
+    if (query.sort === 'popular') qb.orderBy('d.viewCount', 'DESC').addOrderBy('d.publishedAt', 'DESC');
+    else qb.orderBy('d.publishedAt', 'DESC');
 
     const rows = await qb
       .offset(query.offset ?? 0)
@@ -106,18 +101,12 @@ export class PublicDocsService {
       where: { slug },
       relations: { owner: true },
     });
-    if (!doc || !doc.publishedAt)
-      throw new NotFoundException(
-        "This page doesn’t exist or is no longer public.",
-      );
+    if (!doc || !doc.publishedAt) throw new NotFoundException('This page doesn’t exist or is no longer public.');
     return doc as Doc & { publishedAt: Date; slug: string };
   }
 
   /** The reading page: the doc plus who may do what. Counts a view (once per reader per few hours). */
-  async read(
-    slug: string,
-    viewer: { userId?: string; ip: string; userAgent: string },
-  ) {
+  async read(slug: string, viewer: { userId?: string; ip: string; userAgent: string }) {
     const doc = await this.get(slug);
     const isOwner = viewer.userId === doc.ownerId;
     if (
@@ -125,7 +114,7 @@ export class PublicDocsService {
       !BOT_UA.test(viewer.userAgent) &&
       this.firstViewInWindow(`${doc.id}|${viewer.userId ?? viewer.ip}`)
     ) {
-      await this.docs.increment({ id: doc.id }, "viewCount", 1);
+      await this.docs.increment({ id: doc.id }, 'viewCount', 1);
       doc.viewCount += 1;
     }
     return {
@@ -137,6 +126,8 @@ export class PublicDocsService {
       publishedAt: doc.publishedAt.toISOString(),
       updatedAt: doc.updatedAt.toISOString(),
       viewCount: doc.viewCount,
+      topics: doc.topics ?? [],
+      readMinutes: readMinutes(doc.wordCount),
       commentCount: await this.visibleCommentCount(doc.id),
       allowComments: doc.allowComments,
       isOwner,
@@ -168,12 +159,9 @@ export class PublicDocsService {
   /** Comments the public sees: not deleted, not hidden, and not replies to a hidden comment. */
   visibleCommentCount(docId: string) {
     return this.docs.manager
-      .createQueryBuilder(Comment, "c")
-      .leftJoin(Comment, "p", "p.id = c.parentId")
-      .where(
-        "c.docId = :docId AND c.deletedAt IS NULL AND c.hiddenAt IS NULL AND p.hiddenAt IS NULL",
-        { docId },
-      )
+      .createQueryBuilder(Comment, 'c')
+      .leftJoin(Comment, 'p', 'p.id = c.parentId')
+      .where('c.docId = :docId AND c.deletedAt IS NULL AND c.hiddenAt IS NULL AND p.hiddenAt IS NULL', { docId })
       .getCount();
   }
 
@@ -182,8 +170,7 @@ export class PublicDocsService {
     const last = this.recentViews.get(key);
     if (last && now - last < VIEW_DEDUPE_MS) return false;
     if (this.recentViews.size > 20_000) {
-      for (const [k, t] of this.recentViews)
-        if (now - t >= VIEW_DEDUPE_MS) this.recentViews.delete(k);
+      for (const [k, t] of this.recentViews) if (now - t >= VIEW_DEDUPE_MS) this.recentViews.delete(k);
       if (this.recentViews.size > 20_000) this.recentViews.clear();
     }
     this.recentViews.set(key, now);
@@ -191,27 +178,33 @@ export class PublicDocsService {
   }
 }
 
-export const author = (u: {
-  name: string;
-  githubLogin: string | null;
-  avatarUrl: string | null;
-}): PublicAuthor => ({
+export const author = (u: { name: string; githubLogin: string | null; avatarUrl: string | null }): PublicAuthor => ({
   name: u.name,
   login: u.githubLogin,
   avatarUrl: u.avatarUrl,
 });
 
-const iso = (v: unknown) =>
-  v instanceof Date ? v.toISOString() : new Date(String(v)).toISOString();
+/** Same rule as the reader's "N min read": 220 words a minute, at least 1. */
+const readMinutes = (words: number) => Math.max(1, Math.round(words / 220));
+
+/** JSON columns come back parsed or as text, depending on the driver path. */
+function parseTopics(v: unknown): string[] {
+  const list = typeof v === 'string' ? (JSON.parse(v) as unknown) : v;
+  return Array.isArray(list) ? list.filter((t): t is string => typeof t === 'string') : [];
+}
+
+const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : new Date(String(v)).toISOString());
 
 function toSummary(r: Record<string, unknown>): PublicDocSummary {
   return {
     slug: String(r.slug),
     title: String(r.title),
-    excerpt: String(r.excerpt ?? ""),
+    excerpt: String(r.excerpt ?? ''),
     publishedAt: iso(r.publishedAt),
     updatedAt: iso(r.updatedAt),
     viewCount: Number(r.viewCount ?? 0),
+    topics: parseTopics(r.topics),
+    readMinutes: readMinutes(Number(r.wordCount ?? 0)),
     commentCount: Number(r.commentCount ?? 0),
     author: {
       name: String(r.authorName),

@@ -50,6 +50,9 @@ export interface PublicDocSummary {
   updatedAt: string
   viewCount: number
   commentCount: number
+  /** Main section headings. */
+  topics: string[]
+  readMinutes: number
   author: PublicAuthor
 }
 

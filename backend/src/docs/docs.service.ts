@@ -1,31 +1,33 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { randomBytes } from "node:crypto";
-import { Brackets, IsNull, Not, QueryFailedError, Repository } from "typeorm";
-import { ProjectsService } from "../projects/projects.service";
-import { Doc } from "./doc.entity";
-import {
-  CreateDocDto,
-  ListDocsQuery,
-  SharingDto,
-  UpdateDocDto,
-} from "./docs.dto";
-import { deriveTitle, makeExcerpt, slugify } from "./markdown.util";
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { randomBytes } from 'node:crypto';
+import { Brackets, IsNull, Not, QueryFailedError, Repository } from 'typeorm';
+import { ProjectsService } from '../projects/projects.service';
+import { Doc } from './doc.entity';
+import { CreateDocDto, ListDocsQuery, SharingDto, UpdateDocDto } from './docs.dto';
+import { countWords, deriveTitle, makeExcerpt, slugify, topicsOf } from './markdown.util';
 
 const SUMMARY_COLUMNS = [
-  "id",
-  "projectId",
-  "title",
-  "excerpt",
-  "createdAt",
-  "updatedAt",
-  "lastOpenedAt",
-  "slug",
-  "publishedAt",
-  "allowComments",
+  'id',
+  'projectId',
+  'title',
+  'excerpt',
+  'createdAt',
+  'updatedAt',
+  'lastOpenedAt',
+  'slug',
+  'publishedAt',
+  'allowComments',
 ] as const;
 
-const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => "\\" + c);
+/** Fields computed from the content on every save (summary, topics, length). */
+export const derived = (content: string) => ({
+  excerpt: makeExcerpt(content),
+  topics: topicsOf(content),
+  wordCount: countWords(content),
+});
+
+const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => '\\' + c);
 
 @Injectable()
 export class DocsService {
@@ -36,34 +38,29 @@ export class DocsService {
 
   list(ownerId: string, query: ListDocsQuery) {
     const qb = this.docs
-      .createQueryBuilder("d")
+      .createQueryBuilder('d')
       .select(SUMMARY_COLUMNS.map((c) => `d.${c}`))
-      .where("d.ownerId = :ownerId", { ownerId });
+      .where('d.ownerId = :ownerId', { ownerId });
 
-    if (query.projectId)
-      qb.andWhere("d.projectId = :projectId", { projectId: query.projectId });
-    else if (query.scope === "loose") qb.andWhere("d.projectId IS NULL");
+    if (query.projectId) qb.andWhere('d.projectId = :projectId', { projectId: query.projectId });
+    else if (query.scope === 'loose') qb.andWhere('d.projectId IS NULL');
 
     if (query.q) {
       const like = `%${escapeLike(query.q)}%`;
       qb.andWhere(
-        new Brackets((w) =>
-          w
-            .where("d.title LIKE :like", { like })
-            .orWhere("d.content LIKE :like", { like }),
-        ),
+        new Brackets((w) => w.where('d.title LIKE :like', { like }).orWhere('d.content LIKE :like', { like })),
       );
     }
 
-    switch (query.sort ?? "recent") {
-      case "recent":
-        qb.orderBy("d.lastOpenedAt", "DESC");
+    switch (query.sort ?? 'recent') {
+      case 'recent':
+        qb.orderBy('d.lastOpenedAt', 'DESC');
         break;
-      case "updated":
-        qb.orderBy("d.updatedAt", "DESC");
+      case 'updated':
+        qb.orderBy('d.updatedAt', 'DESC');
         break;
-      case "title":
-        qb.orderBy("d.title", "ASC");
+      case 'title':
+        qb.orderBy('d.title', 'ASC');
         break;
     }
     return qb.take(query.limit ?? 500).getMany();
@@ -86,7 +83,7 @@ export class DocsService {
         projectId: dto.projectId ?? null,
         title: dto.title || deriveTitle(dto.content),
         content: dto.content,
-        excerpt: makeExcerpt(dto.content),
+        ...derived(dto.content),
         updatedAt: now,
         lastOpenedAt: now,
       }),
@@ -102,10 +99,9 @@ export class DocsService {
     const patch: Partial<Doc> = {};
     if (dto.content !== undefined) {
       patch.content = dto.content;
-      patch.excerpt = makeExcerpt(dto.content);
+      Object.assign(patch, derived(dto.content));
     }
-    if (dto.title !== undefined)
-      patch.title = dto.title || deriveTitle(dto.content ?? doc.content);
+    if (dto.title !== undefined) patch.title = dto.title || deriveTitle(dto.content ?? doc.content);
     if (dto.projectId !== undefined) patch.projectId = dto.projectId;
     patch.updatedAt = patch.lastOpenedAt = new Date();
     await this.docs.update({ id, ownerId }, patch);
@@ -115,36 +111,23 @@ export class DocsService {
   /** Publish / unpublish, and turn comments on or off. Each change is a conditional, single-column write. */
   async setSharing(ownerId: string, id: string, dto: SharingDto) {
     const doc = await this.find(ownerId, id);
-    if (dto.allowComments !== undefined)
-      await this.docs.update(
-        { id, ownerId },
-        { allowComments: dto.allowComments },
-      );
-    if (dto.public === false)
-      await this.docs.update({ id, ownerId }, { publishedAt: null });
+    if (dto.allowComments !== undefined) await this.docs.update({ id, ownerId }, { allowComments: dto.allowComments });
+    if (dto.public === false) await this.docs.update({ id, ownerId }, { publishedAt: null });
     if (dto.public === true) {
       // First publish: assign a slug only if none exists yet, so concurrent publishes agree on one link.
       // Random suffix keeps slugs unique and unguessable from the title alone; retry on the rare clash.
       for (let attempt = 0; !doc.slug; attempt++) {
-        const slug = `${slugify(doc.title)}-${randomBytes(4).toString("hex").slice(0, 6)}`;
+        const slug = `${slugify(doc.title)}-${randomBytes(4).toString('hex').slice(0, 6)}`;
         try {
           await this.docs.update({ id, ownerId, slug: IsNull() }, { slug });
           break;
         } catch (error) {
-          if (
-            attempt < 3 &&
-            error instanceof QueryFailedError &&
-            /Duplicate entry/.test(error.message)
-          )
-            continue;
+          if (attempt < 3 && error instanceof QueryFailedError && /Duplicate entry/.test(error.message)) continue;
           throw error;
         }
       }
       // Keep the original publish date when it's already public.
-      await this.docs.update(
-        { id, ownerId, publishedAt: IsNull() },
-        { publishedAt: new Date() },
-      );
+      await this.docs.update({ id, ownerId, publishedAt: IsNull() }, { publishedAt: new Date() });
     }
     return this.find(ownerId, id);
   }
@@ -157,7 +140,7 @@ export class DocsService {
         { id, publishedAt: Not(IsNull()) },
       ],
     });
-    if (!doc) throw new NotFoundException("Document not found");
+    if (!doc) throw new NotFoundException('Document not found');
     return doc;
   }
 
@@ -173,7 +156,7 @@ export class DocsService {
 
   private async find(ownerId: string, id: string) {
     const doc = await this.docs.findOneBy({ id, ownerId });
-    if (!doc) throw new NotFoundException("Document not found");
+    if (!doc) throw new NotFoundException('Document not found');
     return doc;
   }
 }

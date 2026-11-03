@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash } from 'node:crypto';
 
 /** How often expired entries are swept, and the most writers / texts tracked at once. */
 const SWEEP_EVERY_MS = 60_000;
@@ -30,9 +30,7 @@ export class WriteLimiter {
     const known = this.hits.get(key);
     if (!known && this.hits.size >= this.capacity) return false;
     const recent = (known ?? []).filter((t) => now - t < this.longest);
-    const full = this.windows.some(
-      (w) => recent.filter((t) => now - t < w.ms).length >= w.max,
-    );
+    const full = this.windows.some((w) => recent.filter((t) => now - t < w.ms).length >= w.max);
     if (!full) recent.push(now);
     if (recent.length) this.hits.set(key, recent);
     else this.hits.delete(key);
@@ -42,8 +40,7 @@ export class WriteLimiter {
   private sweep(now: number) {
     if (now - this.lastSweep < SWEEP_EVERY_MS) return;
     this.lastSweep = now;
-    for (const [k, times] of this.hits)
-      if (!times.some((t) => now - t < this.longest)) this.hits.delete(k);
+    for (const [k, times] of this.hits) if (!times.some((t) => now - t < this.longest)) this.hits.delete(k);
   }
 }
 
@@ -81,20 +78,16 @@ export class DuplicateGuard {
   ) {}
 
   static key(docId: string, writer: string, body: string) {
-    return createHash("sha256")
-      .update(`${docId}\n${writer}\n${body.toLowerCase().replace(/\s+/g, " ")}`)
-      .digest("hex");
+    return createHash('sha256')
+      .update(`${docId}\n${writer}\n${body.toLowerCase().replace(/\s+/g, ' ')}`)
+      .digest('hex');
   }
 
   /**
    * Reserves `key` for `commentId` (null = a new comment). Null if another comment (or another
    * in-flight write) holds it — or if the guard is full, which errs on the side of refusing.
    */
-  reserve(
-    key: string,
-    commentId: string | null,
-    now = Date.now(),
-  ): Reservation | null {
+  reserve(key: string, commentId: string | null, now = Date.now()): Reservation | null {
     this.sweep(now);
     const current = this.held.get(key);
     const live = current && now - current.at < this.ttlMs ? current : undefined;
@@ -124,7 +117,6 @@ export class DuplicateGuard {
   private sweep(now: number) {
     if (now - this.lastSweep < SWEEP_EVERY_MS) return;
     this.lastSweep = now;
-    for (const [k, v] of this.held)
-      if (now - v.at >= this.ttlMs) this.held.delete(k);
+    for (const [k, v] of this.held) if (now - v.at >= this.ttlMs) this.held.delete(k);
   }
 }

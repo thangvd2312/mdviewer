@@ -1,4 +1,4 @@
-import type { Request } from "express";
+import type { Request } from 'express';
 
 export interface ClientInfo {
   ip: string;
@@ -7,7 +7,7 @@ export interface ClientInfo {
   device: string;
 }
 
-const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 
 /**
  * The visitor's IP and device. In production the app listens on 127.0.0.1 behind cloudflared,
@@ -15,16 +15,14 @@ const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
  * request arrives from this machine (anything else can't have come through the tunnel).
  */
 export function clientInfo(req: Request): ClientInfo {
-  const remote = req.socket.remoteAddress ?? "";
+  const remote = req.socket.remoteAddress ?? '';
   let ip = remote;
   if (LOOPBACK.has(remote)) {
-    const forwarded =
-      header(req, "cf-connecting-ip") ??
-      header(req, "x-forwarded-for")?.split(",")[0];
+    const forwarded = header(req, 'cf-connecting-ip') ?? header(req, 'x-forwarded-for')?.split(',')[0];
     if (forwarded?.trim()) ip = forwarded.trim();
   }
-  ip = ip.replace(/^::ffff:/, "").slice(0, 45) || "unknown";
-  const userAgent = (header(req, "user-agent") ?? "").slice(0, 400);
+  ip = ip.replace(/^::ffff:/, '').slice(0, 45) || 'unknown';
+  const userAgent = (header(req, 'user-agent') ?? '').slice(0, 400);
   return { ip, userAgent, device: describeDevice(userAgent) };
 }
 
@@ -34,42 +32,42 @@ const header = (req: Request, name: string) => {
 };
 
 export function describeDevice(ua: string): string {
-  if (!ua) return "Unknown device";
+  if (!ua) return 'Unknown device';
   const os = /iPhone/.test(ua)
-    ? "iPhone"
+    ? 'iPhone'
     : /iPad/.test(ua)
-      ? "iPad"
+      ? 'iPad'
       : /Android/.test(ua)
         ? /Mobile/.test(ua)
-          ? "Android phone"
-          : "Android tablet"
+          ? 'Android phone'
+          : 'Android tablet'
         : /Windows/.test(ua)
-          ? "Windows"
+          ? 'Windows'
           : /Mac OS X|Macintosh/.test(ua)
-            ? "Mac"
+            ? 'Mac'
             : /CrOS/.test(ua)
-              ? "ChromeOS"
+              ? 'ChromeOS'
               : /Linux/.test(ua)
-                ? "Linux"
-                : "Other";
+                ? 'Linux'
+                : 'Other';
   const browser = /Zalo/i.test(ua)
-    ? "Zalo"
+    ? 'Zalo'
     : /FBAN|FBAV|FB_IAB/.test(ua)
-      ? "Facebook"
+      ? 'Facebook'
       : /Edg\//.test(ua)
-        ? "Edge"
+        ? 'Edge'
         : /OPR\/|Opera/.test(ua)
-          ? "Opera"
+          ? 'Opera'
           : /SamsungBrowser/.test(ua)
-            ? "Samsung Internet"
+            ? 'Samsung Internet'
             : /CriOS|Chrome\//.test(ua)
-              ? "Chrome"
+              ? 'Chrome'
               : /FxiOS|Firefox\//.test(ua)
-                ? "Firefox"
+                ? 'Firefox'
                 : /Safari\//.test(ua)
-                  ? "Safari"
+                  ? 'Safari'
                   : /bot|crawl|spider|curl|wget|python|httpclient/i.test(ua)
-                    ? "Bot/script"
-                    : "Browser";
+                    ? 'Bot/script'
+                    : 'Browser';
   return `${os} · ${browser}`;
 }

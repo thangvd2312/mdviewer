@@ -1,4 +1,4 @@
-import { Transform, Type } from "class-transformer";
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsIn,
@@ -11,10 +11,9 @@ import {
   MaxLength,
   Min,
   MinLength,
-} from "class-validator";
+} from 'class-validator';
 
-const trim = ({ value }: { value: unknown }) =>
-  typeof value === "string" ? value.trim() : value;
+const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
 export const COMMENT_MAX = 4000;
 
@@ -26,8 +25,8 @@ export class ExploreQuery {
   q?: string;
 
   @IsOptional()
-  @IsIn(["latest", "popular"])
-  sort?: "latest" | "popular";
+  @IsIn(['latest', 'popular'])
+  sort?: 'latest' | 'popular';
 
   /** GitHub login of the author. */
   @Transform(trim)

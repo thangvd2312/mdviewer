@@ -9,27 +9,17 @@ import {
   NotFoundException,
   OnModuleDestroy,
   OnModuleInit,
-} from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { InjectRepository } from "@nestjs/typeorm";
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import {
-  Brackets,
-  EntityManager,
-  In,
-  IsNull,
-  LessThan,
-  MoreThan,
-  Not,
-  Repository,
-  SelectQueryBuilder,
-} from "typeorm";
-import { Doc } from "../docs/doc.entity";
-import type { ClientInfo } from "./client-info";
-import { Comment, CommentBlock } from "./comment.entity";
-import { CreateCommentDto, UpdateCommentDto } from "./public.dto";
-import { PublicDocsService } from "./public-docs.service";
-import { DuplicateGuard, WriteLimiter } from "./write-limits";
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { Brackets, EntityManager, In, IsNull, LessThan, MoreThan, Not, Repository, SelectQueryBuilder } from 'typeorm';
+import { Doc } from '../docs/doc.entity';
+import type { ClientInfo } from './client-info';
+import { Comment, CommentBlock } from './comment.entity';
+import { CreateCommentDto, UpdateCommentDto } from './public.dto';
+import { PublicDocsService } from './public-docs.service';
+import { DuplicateGuard, WriteLimiter } from './write-limits';
 
 /** Who is acting: a signed-in user and/or a guest, always with their IP and device. */
 export interface Actor {
@@ -41,14 +31,14 @@ export interface Actor {
 
 export type CommentAuthorView =
   | {
-      kind: "user";
+      kind: 'user';
       name: string;
       login: string | null;
       avatarUrl: string | null;
       isDocAuthor: boolean;
     }
-  | { kind: "guest"; name: string }
-  | { kind: "gone" };
+  | { kind: 'guest'; name: string }
+  | { kind: 'gone' };
 
 export interface CommentView {
   id: string;
@@ -92,7 +82,7 @@ const REPLIES_PAGE = 50;
 const IP_BLOCK_DAYS = 180;
 const ERASE_BATCH = 1000;
 
-const GUEST_DEFAULT_NAME = "Anonymous";
+const GUEST_DEFAULT_NAME = 'Anonymous';
 
 @Injectable()
 export class CommentsService implements OnModuleInit, OnModuleDestroy {
@@ -121,10 +111,7 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
     private readonly publicDocs: PublicDocsService,
     config: ConfigService,
   ) {
-    this.retentionDays = Math.max(
-      1,
-      Number(config.get("COMMENT_IP_RETENTION_DAYS", 90)) || 90,
-    );
+    this.retentionDays = Math.max(1, Number(config.get('COMMENT_IP_RETENTION_DAYS', 90)) || 90);
   }
 
   onModuleInit() {
@@ -150,51 +137,44 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
     const doc = await this.publicDocs.get(slug);
     const isOwner = viewerId === doc.ownerId;
     const qb = this.comments
-      .createQueryBuilder("c")
-      .leftJoinAndSelect("c.author", "author")
-      .where("c.docId = :docId AND c.parentId IS NULL", { docId: doc.id })
+      .createQueryBuilder('c')
+      .leftJoinAndSelect('c.author', 'author')
+      .where('c.docId = :docId AND c.parentId IS NULL', { docId: doc.id })
       .andWhere(
         new Brackets((w) =>
           w
-            .where("c.deletedAt IS NULL")
+            .where('c.deletedAt IS NULL')
             .orWhere(
-              `EXISTS (SELECT 1 FROM doc_comments r WHERE r.parentId = c.id AND r.deletedAt IS NULL${isOwner ? "" : " AND r.hiddenAt IS NULL"})`,
+              `EXISTS (SELECT 1 FROM doc_comments r WHERE r.parentId = c.id AND r.deletedAt IS NULL${isOwner ? '' : ' AND r.hiddenAt IS NULL'})`,
             ),
         ),
       )
-      .orderBy("c.createdAt", "DESC")
-      .addOrderBy("c.id", "DESC")
+      .orderBy('c.createdAt', 'DESC')
+      .addOrderBy('c.id', 'DESC')
       .take(THREADS_PAGE + 1);
-    if (!isOwner) qb.andWhere("c.hiddenAt IS NULL");
+    if (!isOwner) qb.andWhere('c.hiddenAt IS NULL');
     const cursor = decodeCursor(before);
     if (cursor) {
       qb.andWhere(
         new Brackets((w) =>
           w
-            .where("c.createdAt < :at", { at: cursor.at })
-            .orWhere("c.createdAt = :at AND c.id < :id", { id: cursor.id }),
+            .where('c.createdAt < :at', { at: cursor.at })
+            .orWhere('c.createdAt = :at AND c.id < :id', { id: cursor.id }),
         ),
       );
     }
     const rows = await qb.getMany();
     const roots = rows.slice(0, THREADS_PAGE);
-    const replyPages = await Promise.all(
-      roots.map((r) =>
-        this.replyPage(r.id, isOwner, undefined, REPLIES_PREVIEW),
-      ),
-    );
+    const replyPages = await Promise.all(roots.map((r) => this.replyPage(r.id, isOwner, undefined, REPLIES_PREVIEW)));
     const all = [...roots, ...replyPages.flatMap((p) => p.rows)];
     const blocks = isOwner ? await this.blocksFor(doc.ownerId, all) : [];
     return {
       threads: roots.map((root, i): ThreadView => ({
         comment: this.view(root, doc, viewerId, isOwner, blocks),
-        replies: replyPages[i]!.rows.map((c) =>
-          this.view(c, doc, viewerId, isOwner, blocks),
-        ),
+        replies: replyPages[i]!.rows.map((c) => this.view(c, doc, viewerId, isOwner, blocks)),
         moreReplies: replyPages[i]!.next,
       })),
-      nextCursor:
-        rows.length > THREADS_PAGE ? encodeCursor(roots.at(-1)!) : null,
+      nextCursor: rows.length > THREADS_PAGE ? encodeCursor(roots.at(-1)!) : null,
       count: await this.publicDocs.visibleCommentCount(doc.id),
       allowComments: doc.allowComments,
       canModerate: isOwner,
@@ -205,43 +185,28 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
   async replies(rootId: string, viewerId: string | undefined, after?: string) {
     const { comment: root, doc } = await this.load(rootId);
     const isOwner = viewerId === doc.ownerId;
-    if (root.parentId || (root.hiddenAt && !isOwner))
-      throw new NotFoundException("That comment is no longer here.");
-    const page = await this.replyPage(
-      root.id,
-      isOwner,
-      decodeCursor(after) ?? undefined,
-      REPLIES_PAGE,
-    );
+    if (root.parentId || (root.hiddenAt && !isOwner)) throw new NotFoundException('That comment is no longer here.');
+    const page = await this.replyPage(root.id, isOwner, decodeCursor(after) ?? undefined, REPLIES_PAGE);
     const blocks = isOwner ? await this.blocksFor(doc.ownerId, page.rows) : [];
     return {
-      replies: page.rows.map((c) =>
-        this.view(c, doc, viewerId, isOwner, blocks),
-      ),
+      replies: page.rows.map((c) => this.view(c, doc, viewerId, isOwner, blocks)),
       moreReplies: page.next,
     };
   }
 
-  private async replyPage(
-    rootId: string,
-    isOwner: boolean,
-    after: { at: Date; id: string } | undefined,
-    size: number,
-  ) {
+  private async replyPage(rootId: string, isOwner: boolean, after: { at: Date; id: string } | undefined, size: number) {
     const qb = this.comments
-      .createQueryBuilder("c")
-      .leftJoinAndSelect("c.author", "author")
-      .where("c.parentId = :rootId AND c.deletedAt IS NULL", { rootId })
-      .orderBy("c.createdAt", "ASC")
-      .addOrderBy("c.id", "ASC")
+      .createQueryBuilder('c')
+      .leftJoinAndSelect('c.author', 'author')
+      .where('c.parentId = :rootId AND c.deletedAt IS NULL', { rootId })
+      .orderBy('c.createdAt', 'ASC')
+      .addOrderBy('c.id', 'ASC')
       .take(size + 1);
-    if (!isOwner) qb.andWhere("c.hiddenAt IS NULL");
+    if (!isOwner) qb.andWhere('c.hiddenAt IS NULL');
     if (after) {
       qb.andWhere(
         new Brackets((w) =>
-          w
-            .where("c.createdAt > :at", { at: after.at })
-            .orWhere("c.createdAt = :at AND c.id > :id", { id: after.id }),
+          w.where('c.createdAt > :at', { at: after.at }).orWhere('c.createdAt = :at AND c.id > :id', { id: after.id }),
         ),
       );
     }
@@ -261,30 +226,22 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
     const body = normalize(dto.body);
     // Cheap checks, then the write limiter — all before the first await, so concurrent requests
     // are admitted one at a time.
-    if (!body) throw new BadRequestException("Write something first.");
+    if (!body) throw new BadRequestException('Write something first.');
     this.rejectBots(dto, guest);
-    if (countLinks(body) > limits.links)
-      throw new BadRequestException(tooManyLinks(limits.links));
+    if (countLinks(body) > limits.links) throw new BadRequestException(tooManyLinks(limits.links));
     this.admitWrite(actor);
 
     const doc = await this.publicDocs.get(slug);
-    if (!doc.allowComments)
-      throw new ForbiddenException("Comments are turned off for this page.");
+    if (!doc.allowComments) throw new ForbiddenException('Comments are turned off for this page.');
     await this.rejectBlocked(doc, actor);
 
     const writer = writerKey(actor);
-    const reservation = this.duplicates.reserve(
-      DuplicateGuard.key(doc.id, writer, body),
-      null,
-    );
-    if (!reservation)
-      throw new ConflictException("You already posted this comment.");
+    const reservation = this.duplicates.reserve(DuplicateGuard.key(doc.id, writer, body), null);
+    if (!reservation) throw new ConflictException('You already posted this comment.');
     try {
       if (await this.isDuplicateInDb(doc.id, actor, body))
-        throw new ConflictException("You already posted this comment.");
-      const guestToken = guest
-        ? randomBytes(24).toString("base64url")
-        : undefined;
+        throw new ConflictException('You already posted this comment.');
+      const guestToken = guest ? randomBytes(24).toString('base64url') : undefined;
       const saved = await this.comments.manager.transaction(async (m) => {
         let parentId: string | null = null;
         if (dto.parentId) {
@@ -298,12 +255,9 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
           // Re-check after the lock (current data): the thread and the comment being answered must
           // still be there, on this page, and visible.
           // Locking read (current data, not the transaction's snapshot), after the root lock.
-          const current =
-            root && target!.parentId ? await lockComment(m, target!.id) : root;
-          const gone = (c: Comment | null) =>
-            !c || c.docId !== doc.id || c.deletedAt || c.hiddenAt;
-          if (!root || gone(root) || gone(current))
-            throw new NotFoundException("That comment is no longer here.");
+          const current = root && target!.parentId ? await lockComment(m, target!.id) : root;
+          const gone = (c: Comment | null) => !c || c.docId !== doc.id || c.deletedAt || c.hiddenAt;
+          if (!root || gone(root) || gone(current)) throw new NotFoundException('That comment is no longer here.');
           parentId = root.id; // replies stay one level deep
         }
         return m.save(
@@ -311,10 +265,7 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
             docId: doc.id,
             parentId,
             authorId: actor.userId ?? null,
-            guestName: guest
-              ? dto.guestName?.replace(/\s+/g, " ").slice(0, 50) ||
-                GUEST_DEFAULT_NAME
-              : null,
+            guestName: guest ? dto.guestName?.replace(/\s+/g, ' ').slice(0, 50) || GUEST_DEFAULT_NAME : null,
             guestTokenHash: guestToken ? sha256(guestToken) : null,
             body,
             ip: actor.client.ip,
@@ -330,13 +281,7 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
         relations: { author: true },
       });
       return {
-        comment: this.view(
-          full,
-          doc,
-          actor.userId,
-          actor.userId === doc.ownerId,
-          [],
-        ),
+        comment: this.view(full, doc, actor.userId, actor.userId === doc.ownerId, []),
         ...(guestToken && { guestToken }),
       };
     } catch (error) {
@@ -349,36 +294,22 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
   async update(id: string, dto: UpdateCommentDto, actor: Actor) {
     const limits = actor.userId ? LIMITS.user : LIMITS.guest;
     const body = normalize(dto.body);
-    if (!body) throw new BadRequestException("Write something first.");
-    if (countLinks(body) > limits.links)
-      throw new BadRequestException(tooManyLinks(limits.links));
+    if (!body) throw new BadRequestException('Write something first.');
+    if (countLinks(body) > limits.links) throw new BadRequestException(tooManyLinks(limits.links));
     this.admitWrite(actor);
 
     const { comment, doc } = await this.load(id);
-    if (comment.deletedAt)
-      throw new NotFoundException("That comment was deleted.");
-    this.assertAuthor(comment, actor, "edit");
-    if (!doc.allowComments)
-      throw new ForbiddenException("Comments are turned off for this page.");
+    if (comment.deletedAt) throw new NotFoundException('That comment was deleted.');
+    this.assertAuthor(comment, actor, 'edit');
+    if (!doc.allowComments) throw new ForbiddenException('Comments are turned off for this page.');
     await this.rejectBlocked(doc, actor);
-    if (body === comment.body)
-      return this.view(
-        comment,
-        doc,
-        actor.userId,
-        actor.userId === doc.ownerId,
-        [],
-      );
+    if (body === comment.body) return this.view(comment, doc, actor.userId, actor.userId === doc.ownerId, []);
 
-    const reservation = this.duplicates.reserve(
-      DuplicateGuard.key(doc.id, writerKey(actor), body),
-      comment.id,
-    );
-    if (!reservation)
-      throw new ConflictException("You already posted this comment.");
+    const reservation = this.duplicates.reserve(DuplicateGuard.key(doc.id, writerKey(actor), body), comment.id);
+    if (!reservation) throw new ConflictException('You already posted this comment.');
     try {
       if (await this.isDuplicateInDb(doc.id, actor, body, comment.id)) {
-        throw new ConflictException("You already posted this comment.");
+        throw new ConflictException('You already posted this comment.');
       }
       comment.body = body;
       comment.editedAt = new Date();
@@ -391,35 +322,26 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
       this.duplicates.release(reservation);
       throw error;
     }
-    return this.view(
-      comment,
-      doc,
-      actor.userId,
-      actor.userId === doc.ownerId,
-      [],
-    );
+    return this.view(comment, doc, actor.userId, actor.userId === doc.ownerId, []);
   }
 
   /** By its author or by the document's author. Kept as a placeholder while it has replies. */
   async remove(id: string, actor: Actor) {
     const { comment, doc } = await this.load(id);
-    if (actor.userId !== doc.ownerId)
-      this.assertAuthor(comment, actor, "delete");
+    if (actor.userId !== doc.ownerId) this.assertAuthor(comment, actor, 'delete');
     await this.comments.manager.transaction(async (m) => {
       // Always lock the thread's top-level comment first (same order as posting a reply).
       const root = await lockComment(m, comment.parentId ?? comment.id);
       if (!root) return; // already gone
       if (!comment.parentId) {
         const replies = await liveReplyCount(m, root.id);
-        if (replies > 0)
-          await m.update(Comment, root.id, { deletedAt: new Date(), body: "" });
+        if (replies > 0) await m.update(Comment, root.id, { deletedAt: new Date(), body: '' });
         else await m.delete(Comment, root.id);
         return;
       }
       await m.delete(Comment, comment.id);
       // The last reply of a deleted comment takes the placeholder with it.
-      if (root.deletedAt && (await liveReplyCount(m, root.id)) === 0)
-        await m.delete(Comment, root.id);
+      if (root.deletedAt && (await liveReplyCount(m, root.id)) === 0) await m.delete(Comment, root.id);
     });
   }
 
@@ -427,8 +349,7 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
 
   async setHidden(id: string, hidden: boolean, userId: string) {
     const { comment, doc } = await this.load(id);
-    if (doc.ownerId !== userId)
-      throw new ForbiddenException("Only the author of this page can do that.");
+    if (doc.ownerId !== userId) throw new ForbiddenException('Only the author of this page can do that.');
     await this.comments.update(comment.id, {
       hiddenAt: hidden ? new Date() : null,
     });
@@ -440,19 +361,13 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
    */
   async block(id: string, userId: string) {
     const { comment, doc } = await this.load(id);
-    if (doc.ownerId !== userId)
-      throw new ForbiddenException("Only the author of this page can do that.");
-    if (comment.authorId === userId)
-      throw new BadRequestException("You can’t block yourself.");
+    if (doc.ownerId !== userId) throw new ForbiddenException('Only the author of this page can do that.');
+    if (comment.authorId === userId) throw new BadRequestException('You can’t block yourself.');
     if (!comment.authorId && !comment.ip) {
-      throw new BadRequestException(
-        "This comment is too old to block its writer. You can still hide or delete it.",
-      );
+      throw new BadRequestException('This comment is too old to block its writer. You can still hide or delete it.');
     }
-    const target = comment.authorId
-      ? { userId: comment.authorId }
-      : { ip: comment.ip! };
-    const label = comment.author?.name ?? comment.guestName ?? "Guest";
+    const target = comment.authorId ? { userId: comment.authorId } : { ip: comment.ip! };
+    const label = comment.author?.name ?? comment.guestName ?? 'Guest';
     const exists = await this.blocks.findOneBy({ ownerId: userId, ...target });
     if (!exists) {
       await this.blocks.save(
@@ -465,17 +380,13 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
         }),
       );
     }
-    const ownDocIds = (
-      await this.docs.find({ where: { ownerId: userId }, select: { id: true } })
-    ).map((d) => d.id);
+    const ownDocIds = (await this.docs.find({ where: { ownerId: userId }, select: { id: true } })).map((d) => d.id);
     if (ownDocIds.length) {
       await this.comments.update(
         {
           docId: In(ownDocIds),
           hiddenAt: IsNull(),
-          ...(comment.authorId
-            ? { authorId: comment.authorId }
-            : { ip: comment.ip!, authorId: IsNull() }),
+          ...(comment.authorId ? { authorId: comment.authorId } : { ip: comment.ip!, authorId: IsNull() }),
         },
         { hiddenAt: new Date() },
       );
@@ -485,12 +396,9 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
   /** Lifts the block on this comment's writer (their hidden comments stay hidden until shown again). */
   async unblock(id: string, userId: string) {
     const { comment, doc } = await this.load(id);
-    if (doc.ownerId !== userId)
-      throw new ForbiddenException("Only the author of this page can do that.");
-    if (comment.authorId)
-      await this.blocks.delete({ ownerId: userId, userId: comment.authorId });
-    else if (comment.ip)
-      await this.blocks.delete({ ownerId: userId, ip: comment.ip });
+    if (doc.ownerId !== userId) throw new ForbiddenException('Only the author of this page can do that.');
+    if (comment.authorId) await this.blocks.delete({ ownerId: userId, userId: comment.authorId });
+    else if (comment.ip) await this.blocks.delete({ ownerId: userId, ip: comment.ip });
   }
 
   /** The author's blocks, newest first — from the block records themselves, never exposing IPs. */
@@ -498,15 +406,15 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
     const rows = await this.blocks.find({
       where: { ownerId },
       relations: { user: true },
-      order: { createdAt: "DESC", id: "DESC" },
+      order: { createdAt: 'DESC', id: 'DESC' },
       skip: offset,
       take: limit + 1,
     });
     return {
       items: rows.slice(0, limit).map((b) => ({
         id: b.id,
-        kind: b.userId ? ("user" as const) : ("guest" as const),
-        name: b.user?.name ?? (b.label || "Guest"),
+        kind: b.userId ? ('user' as const) : ('guest' as const),
+        name: b.user?.name ?? (b.label || 'Guest'),
         login: b.user?.githubLogin ?? null,
         device: b.device || null,
         createdAt: b.createdAt.toISOString(),
@@ -517,8 +425,7 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
 
   async removeBlock(ownerId: string, id: string) {
     const result = await this.blocks.delete({ id, ownerId });
-    if (!result.affected)
-      throw new NotFoundException("That block is no longer there.");
+    if (!result.affected) throw new NotFoundException('That block is no longer there.');
   }
 
   // ── Retention ──────────────────────────────────────────────────────────────────────────────
@@ -545,14 +452,10 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
         createdAt: LessThan(new Date(Date.now() - IP_BLOCK_DAYS * DAY_MS)),
       });
       if (erased || lapsed.affected) {
-        this.logger.log(
-          `retention: erased IP data from ${erased} comments, ${lapsed.affected ?? 0} IP blocks lapsed`,
-        );
+        this.logger.log(`retention: erased IP data from ${erased} comments, ${lapsed.affected ?? 0} IP blocks lapsed`);
       }
     } catch (error) {
-      this.logger.error(
-        `retention cleanup failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      this.logger.error(`retention cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -560,14 +463,8 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
 
   /** Bots: the hidden field is filled in, or a guest's form was sent the instant it appeared. */
   private rejectBots(dto: CreateCommentDto, guest: boolean) {
-    const tooFast =
-      guest &&
-      (dto.elapsedMs === undefined ||
-        dto.elapsedMs < LIMITS.guest.minElapsedMs);
-    if (dto.website || tooFast)
-      throw new BadRequestException(
-        "Your comment couldn’t be posted. Please try again.",
-      );
+    const tooFast = guest && (dto.elapsedMs === undefined || dto.elapsedMs < LIMITS.guest.minElapsedMs);
+    if (dto.website || tooFast) throw new BadRequestException('Your comment couldn’t be posted. Please try again.');
   }
 
   /** Synchronous: records the write or refuses it. */
@@ -575,7 +472,7 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
     const limiter = actor.userId ? this.writes.user : this.writes.guest;
     if (!limiter.tryConsume(writerKey(actor))) {
       throw new HttpException(
-        "You’re commenting very fast. Please wait a few minutes and try again.",
+        'You’re commenting very fast. Please wait a few minutes and try again.',
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
@@ -590,22 +487,12 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
         : { ownerId: doc.ownerId, ip: actor.client.ip },
       select: { id: true },
     });
-    if (blocked)
-      throw new ForbiddenException(
-        "The author of this page isn’t accepting your comments.",
-      );
+    if (blocked) throw new ForbiddenException('The author of this page isn’t accepting your comments.');
   }
 
   /** Same text from the same writer on this page in the last day (survives restarts, unlike the memory guard). */
-  private async isDuplicateInDb(
-    docId: string,
-    actor: Actor,
-    body: string,
-    exceptId?: string,
-  ) {
-    const who = actor.userId
-      ? { authorId: actor.userId }
-      : { ip: actor.client.ip, authorId: IsNull() };
+  private async isDuplicateInDb(docId: string, actor: Actor, body: string, exceptId?: string) {
+    const who = actor.userId ? { authorId: actor.userId } : { ip: actor.client.ip, authorId: IsNull() };
     const found = await this.comments.findOne({
       where: {
         ...who,
@@ -621,14 +508,8 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
 
   /** Blocks of the owner that match the writers of these comments (for the "Blocked" badge). */
   private blocksFor(ownerId: string, comments: Comment[]) {
-    const userIds = [
-      ...new Set(
-        comments.map((c) => c.authorId).filter((v): v is string => Boolean(v)),
-      ),
-    ];
-    const ips = [
-      ...new Set(comments.filter((c) => !c.authorId && c.ip).map((c) => c.ip!)),
-    ];
+    const userIds = [...new Set(comments.map((c) => c.authorId).filter((v): v is string => Boolean(v)))];
+    const ips = [...new Set(comments.filter((c) => !c.authorId && c.ip).map((c) => c.ip!))];
     if (!userIds.length && !ips.length) return Promise.resolve([]);
     return this.blocks.find({
       where: [
@@ -638,24 +519,14 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  private assertAuthor(
-    comment: Comment,
-    actor: Actor,
-    action: "edit" | "delete",
-  ) {
+  private assertAuthor(comment: Comment, actor: Actor, action: 'edit' | 'delete') {
     if (comment.authorId) {
-      if (comment.authorId !== actor.userId)
-        throw new ForbiddenException(
-          `You can only ${action} your own comments.`,
-        );
+      if (comment.authorId !== actor.userId) throw new ForbiddenException(`You can only ${action} your own comments.`);
       return;
     }
     const hash = comment.guestTokenHash;
-    const ok = Boolean(
-      hash && actor.guestToken && safeEqual(sha256(actor.guestToken), hash),
-    );
-    if (!ok)
-      throw new ForbiddenException(`You can only ${action} your own comments.`);
+    const ok = Boolean(hash && actor.guestToken && safeEqual(sha256(actor.guestToken), hash));
+    if (!ok) throw new ForbiddenException(`You can only ${action} your own comments.`);
     if (Date.now() - comment.createdAt.getTime() > GUEST_EDIT_MS) {
       throw new ForbiddenException(
         `Guest comments can only be changed for 24 hours. Sign in to ${action} comments any time.`,
@@ -666,16 +537,14 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
   /** A comment (with its secret hash) and its document, which must still be public. */
   private async load(id: string) {
     const comment = await this.comments
-      .createQueryBuilder("c")
-      .addSelect("c.guestTokenHash")
-      .leftJoinAndSelect("c.author", "author")
-      .where("c.id = :id", { id })
+      .createQueryBuilder('c')
+      .addSelect('c.guestTokenHash')
+      .leftJoinAndSelect('c.author', 'author')
+      .where('c.id = :id', { id })
       .getOne();
-    if (!comment)
-      throw new NotFoundException("That comment is no longer here.");
+    if (!comment) throw new NotFoundException('That comment is no longer here.');
     const doc = await this.docs.findOneBy({ id: comment.docId });
-    if (!doc?.publishedAt)
-      throw new NotFoundException("This page is no longer public.");
+    if (!doc?.publishedAt) throw new NotFoundException('This page is no longer public.');
     return { comment, doc };
   }
 
@@ -689,29 +558,27 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
     const author: CommentAuthorView =
       c.authorId && c.author
         ? {
-            kind: "user",
+            kind: 'user',
             name: c.author.name,
             login: c.author.githubLogin,
             avatarUrl: c.author.avatarUrl,
             isDocAuthor: c.authorId === doc.ownerId,
           }
         : c.guestName
-          ? { kind: "guest", name: c.guestName }
-          : { kind: "gone" };
+          ? { kind: 'guest', name: c.guestName }
+          : { kind: 'gone' };
     return {
       id: c.id,
       parentId: c.parentId,
-      body: c.deletedAt ? "" : c.body,
+      body: c.deletedAt ? '' : c.body,
       createdAt: c.createdAt.toISOString(),
       editedAt: c.editedAt?.toISOString() ?? null,
       deleted: Boolean(c.deletedAt),
-      author: c.deletedAt ? { kind: "gone" } : author,
+      author: c.deletedAt ? { kind: 'gone' } : author,
       mine: Boolean(viewerId && c.authorId === viewerId),
       ...(isOwner && {
         hidden: Boolean(c.hiddenAt),
-        blocked: blocks.some((b) =>
-          c.authorId ? b.userId === c.authorId : Boolean(c.ip) && b.ip === c.ip,
-        ),
+        blocked: blocks.some((b) => (c.authorId ? b.userId === c.authorId : Boolean(c.ip) && b.ip === c.ip)),
         device: c.device,
       }),
     };
@@ -720,50 +587,36 @@ export class CommentsService implements OnModuleInit, OnModuleDestroy {
 
 /** SELECT … FOR UPDATE on one comment, inside the transaction. Reads current data (not a snapshot). */
 const lockComment = (m: EntityManager, id: string) =>
-  m
-    .getRepository(Comment)
-    .createQueryBuilder("c")
-    .setLock("pessimistic_write")
-    .where("c.id = :id", { id })
-    .getOne();
+  m.getRepository(Comment).createQueryBuilder('c').setLock('pessimistic_write').where('c.id = :id', { id }).getOne();
 
 /** Replies still present, read with a lock so it reflects concurrent inserts. */
 const liveReplyCount = (m: EntityManager, rootId: string) =>
-  (
-    m
-      .getRepository(Comment)
-      .createQueryBuilder("c") as SelectQueryBuilder<Comment>
-  )
-    .setLock("pessimistic_read")
-    .where("c.parentId = :rootId AND c.deletedAt IS NULL", { rootId })
+  (m.getRepository(Comment).createQueryBuilder('c') as SelectQueryBuilder<Comment>)
+    .setLock('pessimistic_read')
+    .where('c.parentId = :rootId AND c.deletedAt IS NULL', { rootId })
     .getCount();
 
-const writerKey = (actor: Actor) =>
-  actor.userId ? `u:${actor.userId}` : `ip:${actor.client.ip}`;
+const writerKey = (actor: Actor) => (actor.userId ? `u:${actor.userId}` : `ip:${actor.client.ip}`);
 
 /** Pagination cursor: the last item's (createdAt, id). */
-const encodeCursor = (c: Comment) =>
-  Buffer.from(`${c.createdAt.toISOString()}|${c.id}`).toString("base64url");
+const encodeCursor = (c: Comment) => Buffer.from(`${c.createdAt.toISOString()}|${c.id}`).toString('base64url');
 
 function decodeCursor(cursor?: string): { at: Date; id: string } | null {
   if (!cursor) return null;
-  const [at, id] = Buffer.from(cursor, "base64url").toString().split("|");
-  const date = new Date(at ?? "");
+  const [at, id] = Buffer.from(cursor, 'base64url').toString().split('|');
+  const date = new Date(at ?? '');
   if (!id || Number.isNaN(date.getTime()) || !/^[0-9a-f-]{36}$/.test(id))
-    throw new BadRequestException("Invalid cursor.");
+    throw new BadRequestException('Invalid cursor.');
   return { at: date, id };
 }
 
 /** Trim, drop control / zero-width characters, and collapse runs of blank lines. */
 function normalize(text: string) {
   return text
-    .replace(/\r\n?/g, "\n")
-    .replace(
-      /[\u0000-\u0008\u000b-\u001f\u007f\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g,
-      "",
-    )
-    .replace(/\n{3,}/g, "\n\n")
-    .replace(/[ \t]+$/gm, "")
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]+$/gm, '')
     .trim();
 }
 
@@ -775,10 +628,8 @@ const countLinks = (text: string) =>
     ) ?? []
   ).length;
 
-const tooManyLinks = (max: number) =>
-  `Too many links — at most ${max} per comment.`;
+const tooManyLinks = (max: number) => `Too many links — at most ${max} per comment.`;
 
-const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
+const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 
-const safeEqual = (a: string, b: string) =>
-  a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+const safeEqual = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
