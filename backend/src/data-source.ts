@@ -3,6 +3,7 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { Annotation } from './annotations/annotation.entity';
+import { Conversation, Message } from './assistant/conversation.entity';
 import { Doc } from './docs/doc.entity';
 import { Project } from './projects/project.entity';
 import { User } from './users/user.entity';
@@ -15,6 +16,6 @@ export default new DataSource({
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   charset: 'utf8mb4_unicode_ci',
-  entities: [User, Project, Doc, Annotation],
+  entities: [User, Project, Doc, Annotation, Conversation, Message],
   migrations: [__dirname + '/migrations/*.js'],
 });

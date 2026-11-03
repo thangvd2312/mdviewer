@@ -1,5 +1,7 @@
 import { Sparkles, StickyNote } from 'lucide-react'
+import clsx from 'clsx'
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import {
   buildTextIndex,
   KINDS,
@@ -15,6 +17,7 @@ import {
 import type { Annotation, AnnotationKind } from '../../lib/api'
 import { useAnnotationMutations } from '../../lib/queries'
 import { useUI } from '../../lib/ui'
+import { MOBILE_QUERY, TOUCH_QUERY, useMediaQuery, useVisibleArea } from '../../lib/viewport'
 import { MarkdownView } from '../MarkdownView'
 import { NOTE_CARD_WIDTH, NoteCard } from './NoteCard'
 
@@ -33,6 +36,10 @@ interface PendingSelection {
 }
 
 const TOOLBAR_WIDTH = 252
+/** With finger-sized buttons. */
+const TOOLBAR_WIDTH_TOUCH = 328
+/** Roughly how much of the screen the note sheet covers on phones. */
+const SHEET_SPACE = 300
 const isTypingTarget = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))
 
@@ -64,6 +71,13 @@ export const AnnotatedContent = memo(function AnnotatedContent({
   onAsk: (quote: string) => void
 }) {
   const { toast } = useUI()
+  // Phones: the selection toolbar sits at the bottom of the screen (clear of the system's own
+  // selection menu and handles) and notes open as bottom sheets. Touch screens get bigger buttons.
+  const mobile = useMediaQuery(MOBILE_QUERY)
+  const touch = useMediaQuery(TOUCH_QUERY) || mobile
+  const visible = useVisibleArea()
+  const toolbarWidth = touch ? TOOLBAR_WIDTH_TOUCH : TOOLBAR_WIDTH
+  const toolbarWidthRef = useRef(toolbarWidth)
   const { create, update, remove } = useAnnotationMutations(docId)
   const { mutate: updateNote } = update
   const layerRef = useRef<HTMLDivElement>(null)
@@ -163,6 +177,7 @@ export const AnnotatedContent = memo(function AnnotatedContent({
   const selectionRef = useRef(selection)
   useLayoutEffect(() => {
     selectionRef.current = selection
+    toolbarWidthRef.current = toolbarWidth
   })
 
   useEffect(() => {
@@ -181,7 +196,7 @@ export const AnnotatedContent = memo(function AnnotatedContent({
       if (!anchor) return setSelection(null)
       const rect = range.getBoundingClientRect()
       const base = layer.getBoundingClientRect()
-      const half = TOOLBAR_WIDTH / 2
+      const half = toolbarWidthRef.current / 2
       setSelection({
         anchor,
         top: rect.top - base.top,
@@ -290,11 +305,74 @@ export const AnnotatedContent = memo(function AnnotatedContent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jump])
 
+  // Phones: keep the passage visible above the note sheet.
+  useEffect(() => {
+    if (!mobile || !openId) return
+    const range = resolved.get(openId)
+    const scroller = scrollRef.current
+    if (!range || !scroller) return
+    const t = setTimeout(() => {
+      const rect = range.getBoundingClientRect()
+      const top = scroller.getBoundingClientRect().top
+      if (rect.top < top + 16 || rect.bottom > window.innerHeight - SHEET_SPACE) {
+        scroller.scrollBy({ top: rect.top - top - 72, behavior: 'smooth' })
+      }
+    }, 50)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId, mobile])
+
   const open = openId ? annotations.find((a) => a.id === openId) : undefined
   const openBox = openId ? layout.boxes.get(openId) : undefined
   const closeCard = useCallback(() => setOpenId(null), [setOpenId])
   const openKey = open?.id
   const saveBody = useCallback((body: string) => openKey && updateNote({ id: openKey, body }), [openKey, updateNote])
+
+  const toolbar = (
+    <div
+      data-annot-ui
+      role="toolbar"
+      aria-label="Add a sticky note"
+      onMouseDown={(e) => e.preventDefault()}
+      className={clsx(
+        'animate-pop flex items-center gap-0.5 rounded-full bg-ink px-1.5 text-surface shadow-[0_8px_24px_rgba(0,0,0,0.22)]',
+        touch ? 'h-12' : 'h-9',
+      )}
+    >
+      {KINDS.map((k) => (
+        <button
+          key={k.kind}
+          type="button"
+          onClick={() => addNote(k.kind)}
+          title={k.kind === 'note' ? `${k.label} (N)` : k.label}
+          aria-label={`Add ${k.label} note`}
+          className={clsx(
+            'grid place-items-center rounded-full transition hover:bg-white/10 dark:hover:bg-black/10',
+            touch ? 'size-10' : 'size-7',
+          )}
+        >
+          <span
+            className={clsx(
+              'rounded-full ring-2 ring-white/25 transition hover:scale-110 dark:ring-black/20',
+              touch ? 'size-[22px]' : 'size-[15px]',
+            )}
+            style={{ background: kindColor(k.kind) }}
+          />
+        </button>
+      ))}
+      <span className="mx-1 h-4 w-px bg-white/20 dark:bg-black/20" />
+      <button
+        type="button"
+        onClick={ask}
+        className={clsx(
+          'flex items-center gap-1 rounded-full font-medium transition hover:bg-white/10 dark:hover:bg-black/10',
+          touch ? 'h-10 px-3 text-[14px]' : 'h-7 px-2 text-[12.5px]',
+        )}
+      >
+        <Sparkles className={touch ? 'size-4' : 'size-3.5'} /> Ask
+      </button>
+    </div>
+  )
 
   return (
     <div ref={layerRef} className="relative">
@@ -330,8 +408,13 @@ export const AnnotatedContent = memo(function AnnotatedContent({
             onClick={() => setOpenId(openId === a.id ? null : a.id)}
             title={hasBody ? a.body.slice(0, 200) : `${info.label} (highlight)`}
             aria-label={`${info.label} note`}
-            className="absolute -right-8 grid size-[18px] -rotate-6 place-items-center rounded-[5px] text-white shadow-[0_1px_3px_rgba(0,0,0,0.25)] transition hover:scale-115 hover:rotate-0 max-md:-right-[18px]"
-            style={{ top, background: kindColor(a.kind), outline: openId === a.id ? '2px solid var(--ink-faint)' : undefined }}
+            // On phones the marker sits in the 20px page gutter; the ::after enlarges the touch target.
+            className="absolute -right-8 grid size-[18px] -rotate-6 place-items-center rounded-[5px] text-white shadow-[0_1px_3px_rgba(0,0,0,0.25)] transition after:absolute after:-inset-2.5 hover:scale-115 hover:rotate-0 max-md:-right-[18px] max-sm:-right-[17px] max-sm:size-4"
+            style={{
+              top,
+              background: kindColor(a.kind),
+              outline: openId === a.id ? '2px solid var(--ink-faint)' : undefined,
+            }}
           >
             {hasBody ? (
               <StickyNote className="size-[11px]" strokeWidth={2.6} />
@@ -342,49 +425,32 @@ export const AnnotatedContent = memo(function AnnotatedContent({
         )
       })}
 
-      {selection && (
-        <div
-          data-annot-ui
-          role="toolbar"
-          aria-label="Add a sticky note"
-          onMouseDown={(e) => e.preventDefault()}
-          className="animate-pop absolute z-20 flex h-9 items-center gap-0.5 rounded-full bg-ink px-1.5 text-surface shadow-[0_8px_24px_rgba(0,0,0,0.22)]"
-          style={{
-            width: TOOLBAR_WIDTH,
-            left: selection.center - TOOLBAR_WIDTH / 2,
-            top: selection.below ? selection.bottom + 10 : selection.top - 46,
-          }}
-        >
-          {KINDS.map((k) => (
-            <button
-              key={k.kind}
-              type="button"
-              onClick={() => addNote(k.kind)}
-              title={k.kind === 'note' ? `${k.label} (N)` : k.label}
-              aria-label={`Add ${k.label} note`}
-              className="grid size-7 place-items-center rounded-full transition hover:bg-white/10 dark:hover:bg-black/10"
-            >
-              <span
-                className="size-[15px] rounded-full ring-2 ring-white/25 transition hover:scale-110 dark:ring-black/20"
-                style={{ background: kindColor(k.kind) }}
-              />
-            </button>
-          ))}
-          <span className="mx-1 h-4 w-px bg-white/20 dark:bg-black/20" />
-          <button
-            type="button"
-            onClick={ask}
-            className="flex h-7 items-center gap-1 rounded-full px-2 text-[12.5px] font-medium transition hover:bg-white/10 dark:hover:bg-black/10"
+      {selection &&
+        (mobile ? (
+          createPortal(
+            <div className="fixed inset-x-0 z-40 flex justify-center px-3" style={{ bottom: visible.bottomInset + 16 }}>
+              {toolbar}
+            </div>,
+            document.body,
+          )
+        ) : (
+          <div
+            className="absolute z-20"
+            style={{
+              width: toolbarWidth,
+              left: selection.center - toolbarWidth / 2,
+              top: selection.below ? selection.bottom + 10 : selection.top - (touch ? 54 : 46),
+            }}
           >
-            <Sparkles className="size-3.5" /> Ask
-          </button>
-        </div>
-      )}
+            {toolbar}
+          </div>
+        ))}
 
       {open && openBox && (
         <NoteCard
           key={open.id}
           annotation={open}
+          sheet={mobile}
           style={{
             top: openBox.bottom + 12,
             left: Math.max(0, Math.min(openBox.left - 12, layout.width - NOTE_CARD_WIDTH)),

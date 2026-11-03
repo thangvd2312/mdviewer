@@ -1,13 +1,14 @@
 import { Type } from 'class-transformer';
 import {
-  ArrayMaxSize,
-  ArrayMinSize,
-  IsArray,
+  IsBoolean,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
+  Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -35,22 +36,20 @@ export class AssistantContextDto {
   sectionTitle?: string;
 }
 
-export class ChatTurnDto {
-  @IsIn(['user', 'assistant'])
-  role: 'user' | 'assistant';
-
+/** The question being asked. */
+export class ChatQuestionDto {
   @IsString()
   @MinLength(1)
   @MaxLength(20_000)
   content: string;
 
-  /** Passage the user had selected when asking (user turns only). */
+  /** Passage the user had selected when asking. */
   @IsOptional()
   @IsString()
   @MaxLength(2000)
   quote?: string;
 
-  /** Section the user was reading when asking (user turns only). */
+  /** Section the user was reading when asking. */
   @IsOptional()
   @IsString()
   @MaxLength(300)
@@ -58,16 +57,44 @@ export class ChatTurnDto {
 }
 
 export class ChatDto {
-  @IsArray()
-  @ArrayMinSize(1)
-  @ArrayMaxSize(60)
-  @ValidateNested({ each: true })
-  @Type(() => ChatTurnDto)
-  messages: ChatTurnDto[];
+  /** Continue this conversation; omitted = start a new one. Earlier messages are loaded server-side. */
+  @IsOptional()
+  @IsUUID()
+  conversationId?: string;
+
+  @ValidateNested()
+  @Type(() => ChatQuestionDto)
+  message: ChatQuestionDto;
+
+  /** Re-asking after a failure: don't store the question again if it is already the last message. */
+  @IsOptional()
+  @IsBoolean()
+  retry?: boolean;
 
   @ValidateNested()
   @Type(() => AssistantContextDto)
   context: AssistantContextDto;
+}
+
+export class ConversationQueryDto {
+  @IsOptional()
+  @IsIn(PAGES)
+  page?: AssistantPage;
+
+  @IsOptional()
+  @IsUUID()
+  docId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  projectId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
 }
 
 export class SuggestDto {

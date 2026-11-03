@@ -28,6 +28,8 @@ export function AssistiveButton({ onOpen, hint }: { onOpen: (side: Side) => void
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null)
   const [idle, setIdle] = useState(false)
   const start = useRef<{ px: number; py: number; x: number; y: number; moved: boolean } | null>(null)
+  /** The click that follows a drag must not open the assistant. */
+  const justDragged = useRef(false)
   const idleTimer = useRef<number>(undefined)
 
   const y = dock.y < 0 ? window.innerHeight - SIZE - 96 : clampY(dock.y)
@@ -75,11 +77,10 @@ export function AssistiveButton({ onOpen, hint }: { onOpen: (side: Side) => void
   const onPointerUp = (e: PointerEvent<HTMLButtonElement>) => {
     const s = start.current
     start.current = null
-    if (!s) return
-    if (!s.moved) {
-      onOpen(dock.side)
-      return
-    }
+    // A tap opens the assistant in onClick: opening here would let the click that follows land
+    // on whatever the panel puts under the finger (the backdrop on phones) and close it again.
+    if (!s || !s.moved) return
+    justDragged.current = true
     const x = drag?.x ?? s.x
     setDock({ side: x + SIZE / 2 < window.innerWidth / 2 ? 'left' : 'right', y: clampY(drag?.y ?? s.y) })
     setDrag(null)
@@ -100,7 +101,10 @@ export function AssistiveButton({ onOpen, hint }: { onOpen: (side: Side) => void
         setDrag(null)
       }}
       onPointerEnter={wake}
-      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onOpen(dock.side))}
+      onClick={() => {
+        if (justDragged.current) justDragged.current = false
+        else onOpen(dock.side)
+      }}
       className={clsx(
         'fixed z-30 grid touch-none place-items-center rounded-[18px] bg-neutral-900/75 shadow-[0_6px_20px_rgba(0,0,0,0.28)] ring-1 ring-white/10 backdrop-blur-md select-none dark:bg-neutral-800/80',
         drag ? 'scale-105 cursor-grabbing' : 'cursor-pointer transition-[left,top,opacity,transform] duration-300 ease-out hover:scale-105',

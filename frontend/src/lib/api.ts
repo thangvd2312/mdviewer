@@ -69,12 +69,41 @@ export interface ChatTurn {
   role: 'user' | 'assistant'
   content: string
   /** Passage selected when asking (user turns). */
-  quote?: string
+  quote?: string | null
   /** Section being read when asking (user turns). */
-  section?: string
+  section?: string | null
+  /** Answers: 'stopped' when the user stopped it, 'error' when it broke off. */
+  status?: 'complete' | 'stopped' | 'error' | null
+}
+
+/** A stored chat with the assistant. */
+export interface Conversation {
+  id: string
+  page: AssistantContext['page']
+  docId: string | null
+  projectId: string | null
+  title: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ConversationQuery {
+  page?: AssistantContext['page']
+  docId?: string
+  projectId?: string
+  limit?: number
+}
+
+/** The question sent with a chat request; earlier messages are loaded by the server. */
+export interface ChatRequest {
+  conversationId?: string
+  message: { content: string; quote?: string; section?: string }
+  retry?: boolean
+  context: AssistantContext
 }
 
 export type ChatStreamEvent =
+  | { type: 'conversation'; id: string }
   | { type: 'text'; text: string }
   | { type: 'done'; stopReason: string | null }
   | { type: 'error'; message: string }
@@ -165,14 +194,19 @@ export const api = {
     status: () => request<{ enabled: boolean; model: string }>('GET', '/assistant/status'),
     suggest: (context: AssistantContext, selection?: string) =>
       request<{ questions: string[] }>('POST', '/assistant/suggest', { context, selection }),
-    /** Streams the answer to the last user turn; resolves when the stream ends. */
-    async chat(
-      messages: ChatTurn[],
-      context: AssistantContext,
-      onEvent: (e: ChatStreamEvent) => void,
-      signal?: AbortSignal,
-    ) {
-      const res = await send('POST', '/assistant/chat', { messages, context }, signal)
+    conversations: (q: ConversationQuery) => {
+      const params = new URLSearchParams(
+        Object.entries(q)
+          .filter(([, v]) => v !== undefined)
+          .map(([k, v]) => [k, String(v)]),
+      )
+      return request<Conversation[]>('GET', `/assistant/conversations?${params}`)
+    },
+    conversation: (id: string) =>
+      request<Conversation & { messages: ChatTurn[] }>('GET', `/assistant/conversations/${id}`),
+    /** Stores the question and streams the answer; resolves when the stream ends. */
+    async chat(body: ChatRequest, onEvent: (e: ChatStreamEvent) => void, signal?: AbortSignal) {
+      const res = await send('POST', '/assistant/chat', body, signal)
       if (!res.ok || !res.body) throw await errorFrom(res)
       const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
       let buffer = ''

@@ -7,7 +7,9 @@ import { AnnotationsService } from '../annotations/annotations.service';
 import { DocsService } from '../docs/docs.service';
 import { extractSection } from '../docs/markdown.util';
 import { ProjectsService } from '../projects/projects.service';
-import { AssistantContextDto, ChatTurnDto } from './assistant.dto';
+import { AssistantContextDto, ChatDto } from './assistant.dto';
+import type { Message, MessageStatus } from './conversation.entity';
+import { ConversationsService } from './conversations.service';
 
 type Effort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
@@ -22,6 +24,8 @@ const INSTRUCTIONS = `You are the reading assistant built into viewmd, a Markdow
 
 /** SSE events sent to the browser. */
 type StreamEvent =
+  /** First event: the conversation the question and answer are stored in. */
+  | { type: 'conversation'; id: string }
   | { type: 'text'; text: string }
   | { type: 'done'; stopReason: string | null }
   | { type: 'error'; message: string };
@@ -39,6 +43,7 @@ export class AssistantService {
     private readonly docs: DocsService,
     private readonly projects: ProjectsService,
     private readonly annotations: AnnotationsService,
+    private readonly conversations: ConversationsService,
   ) {
     const apiKey = config.get<string>('ASSISTANT_API_KEY');
     this.client = apiKey
@@ -52,9 +57,18 @@ export class AssistantService {
     return { enabled: this.client !== null, model: this.model };
   }
 
-  /** Streams an answer to the last user turn as server-sent events. */
-  async chat(ownerId: string, turns: ChatTurnDto[], context: AssistantContextDto, res: Response) {
+  /**
+   * Stores the question, streams the answer as server-sent events and stores the answer too
+   * (also a partial one when the user stops it or it breaks off).
+   */
+  async chat(ownerId: string, dto: ChatDto, res: Response) {
     const client = this.requireClient();
+    const { context, message } = dto;
+    const conversation = dto.conversationId
+      ? await this.conversations.findOwned(ownerId, dto.conversationId)
+      : await this.conversations.create(ownerId, context, message.content);
+    await this.conversations.addQuestion(conversation, message, dto.retry);
+    const history = await this.conversations.history(conversation.id);
     const system = await this.buildSystem(ownerId, context);
 
     res.status(200);
@@ -63,19 +77,22 @@ export class AssistantService {
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
     const send = (event: StreamEvent) => res.write(`data: ${JSON.stringify(event)}\n\n`);
+    send({ type: 'conversation', id: conversation.id });
 
     const abort = new AbortController();
     res.on('close', () => {
       if (!res.writableEnded) abort.abort();
     });
 
+    let answer = '';
+    let status: MessageStatus = 'complete';
     try {
       const stream = await client.chat.completions.create(
         {
           model: this.model,
           stream: true,
           reasoning_effort: this.effort,
-          messages: [{ role: 'system', content: system }, ...turns.map(toMessageParam)],
+          messages: [{ role: 'system', content: system }, ...history.map(toMessageParam)],
         },
         { signal: abort.signal },
       );
@@ -83,20 +100,36 @@ export class AssistantService {
       for await (const chunk of stream) {
         const choice = chunk.choices[0];
         if (!choice) continue;
-        if (choice.delta?.content) send({ type: 'text', text: choice.delta.content });
-        if (choice.delta?.refusal) send({ type: 'text', text: choice.delta.refusal });
+        const text = choice.delta?.content || choice.delta?.refusal;
+        if (text) {
+          answer += text;
+          send({ type: 'text', text });
+        }
         if (choice.finish_reason) finish = choice.finish_reason;
       }
-      if (finish === 'content_filter') {
+      if (abort.signal.aborted) {
+        status = 'stopped'; // the stream ends quietly when aborted
+      } else if (finish === 'content_filter') {
+        status = 'error';
         send({ type: 'error', message: 'The assistant declined to answer this request.' });
       } else {
         send({ type: 'done', stopReason: finish });
       }
     } catch (error) {
-      if (abort.signal.aborted) return; // the browser went away
-      this.logger.error(`chat failed: ${describe(error)}`);
-      send({ type: 'error', message: userMessage(error) });
+      if (abort.signal.aborted) {
+        status = 'stopped'; // the user pressed Stop or left
+      } else {
+        status = 'error';
+        this.logger.error(`chat failed: ${describe(error)}`);
+        send({ type: 'error', message: userMessage(error) });
+      }
     } finally {
+      // Store before ending the stream, so the answer is there as soon as the client sees the end.
+      if (answer.trim()) {
+        await this.conversations
+          .addAnswer(conversation, answer, status, this.model)
+          .catch((e: unknown) => this.logger.error(`saving answer failed: ${describe(e)}`));
+      }
       res.end();
     }
   }
@@ -181,7 +214,7 @@ Reply with only a JSON object, no code fence: {"questions": ["…", "…", "…"
 }
 
 /** User turns carry the reading context they were asked in; it is rendered the same way every time so the history stays cacheable. */
-function toMessageParam(turn: ChatTurnDto): ChatCompletionMessageParam {
+function toMessageParam(turn: Pick<Message, 'role' | 'content' | 'quote' | 'section'>): ChatCompletionMessageParam {
   if (turn.role === 'assistant') return { role: 'assistant', content: turn.content };
   const lines = [
     turn.section && `Section being read: ${turn.section}`,

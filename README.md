@@ -69,6 +69,8 @@ Trợ lý gọi bất kỳ endpoint nào tương thích OpenAI Chat Completions.
 - Copy Markdown, tải file `.md`, xoá tài liệu hoặc project (xoá project sẽ xoá kèm toàn bộ tài liệu bên trong).
 - **Sticky notes**: bôi đen một đoạn bất kỳ trong tài liệu → chọn màu trên thanh công cụ để ghim note. 6 loại, mỗi loại một màu giấy: Note (vàng), Important (đỏ), Idea (xanh lá), Question (tím), To-do (cam), Definition (xanh dương). Đoạn được ghim sẽ được tô màu, có marker ở lề phải; bấm vào đoạn hoặc marker để mở/sửa note, đổi loại, xoá. Danh sách note (lọc theo loại) nằm ở cột phải hoặc nút *Notes* trên thanh trên. Note gắn theo nội dung text nên vẫn đúng chỗ khi sửa tài liệu; nếu đoạn text bị xoá, note vẫn còn trong danh sách với nhãn "text no longer in document".
 - **Trợ lý AI**: nút nổi kiểu AssistiveTouch, kéo thả được và tự bám mép màn hình. Trợ lý biết bạn đang ở trang nào, đang đọc mục nào và các sticky note của tài liệu, nên gợi ý câu hỏi theo đúng mục đang đọc. Bôi đen một đoạn rồi bấm *Ask* (hoặc ✨ trong note) để hỏi riêng về đoạn đó. Câu trả lời stream trực tiếp; mỗi tài liệu / project có cuộc trò chuyện riêng.
+  - **Lưu lịch sử**: mọi câu hỏi và câu trả lời được lưu trong bảng `assistant_conversations` / `assistant_messages` (kèm tài liệu, mục đang đọc, đoạn trích, thời gian, model; câu trả lời bị dừng giữa chừng có `status = 'stopped'`). Mở lại trợ lý sẽ tiếp tục cuộc trò chuyện gần nhất; *New chat* bắt đầu cuộc mới nhưng cuộc cũ vẫn giữ, xem lại ở nút *Past chats*. Xoá tài liệu/project thì lịch sử vẫn còn (chỉ bỏ liên kết).
+- **Mobile**: bôi đen text thì thanh màu hiện ở đáy màn hình (không đè lên menu chọn text của hệ điều hành); sticky note và trợ lý mở dạng bottom sheet, luôn nằm trên bàn phím ảo; nút to vừa ngón tay; ô nhập 16px để iOS không tự zoom.
 - Light / dark / theo hệ thống. Có giao diện cho mobile, sidebar thu gọn được.
 
 ### Phím tắt
@@ -101,7 +103,9 @@ Tất cả route (trừ `auth/github*`) cần header `Authorization: Bearer <tok
 | PATCH / DELETE | `/api/annotations/:id` | PATCH: `{ kind?, body? }` |
 | GET | `/api/assistant/status` | `{ enabled, model }` |
 | POST | `/api/assistant/suggest` | `{ context, selection? }` → `{ questions }` |
-| POST | `/api/assistant/chat` | `{ messages, context }`, trả về Server-Sent Events (`text` / `reset` / `done` / `error`) |
+| POST | `/api/assistant/chat` | `{ conversationId?, message: { content, quote?, section? }, context, retry? }`, trả về Server-Sent Events (`conversation` / `text` / `done` / `error`). Câu hỏi và câu trả lời đều được lưu vào DB |
+| GET | `/api/assistant/conversations` | `?page=&docId=&projectId=&limit=` → các cuộc trò chuyện đã lưu, mới nhất trước |
+| GET | `/api/assistant/conversations/:id` | Cuộc trò chuyện kèm toàn bộ tin nhắn |
 
 Nội dung tối đa khoảng 2 triệu ký tự (body JSON giới hạn 5 MB).
 

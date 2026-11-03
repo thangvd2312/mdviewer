@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { api, ApiError, type AssistantContext, type ChatTurn } from './api'
+import { api, ApiError, type AssistantContext, type ChatRequest, type ChatTurn, type ConversationQuery } from './api'
 
 /** What the user is looking at, as published by the current page. */
 export interface PageInfo {
@@ -12,6 +12,10 @@ export interface Thread {
   turns: ChatTurn[]
   streaming: boolean
   error?: string
+  /** The stored conversation this thread continues (none yet = the next question starts one). */
+  conversationId?: string
+  /** Restoring the last conversation from the server. */
+  loading?: boolean
 }
 
 interface AssistantActions {
@@ -32,6 +36,8 @@ interface AssistantState {
   stop: () => void
   retry: () => void
   reset: () => void
+  /** Shows a stored conversation (from the history list) for the current page. */
+  openConversation: (id: string) => void
   /** Increments whenever the input should take focus. */
   focusSignal: number
 }
@@ -45,6 +51,14 @@ const EMPTY: Thread = { turns: [], streaming: false }
 /** Conversations are kept per document / project, so each has its own chat. */
 const threadKey = (ctx: AssistantContext) =>
   ctx.page === 'doc' ? `doc:${ctx.docId}` : ctx.page === 'project' ? `project:${ctx.projectId}` : 'general'
+
+/** Which stored conversations belong to the chat for this context. */
+export const conversationQuery = (ctx: AssistantContext): ConversationQuery =>
+  ctx.page === 'doc'
+    ? { page: 'doc', docId: ctx.docId }
+    : ctx.page === 'project'
+      ? { page: 'project', projectId: ctx.projectId }
+      : { page: 'home' }
 
 export function AssistantProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false)
@@ -68,13 +82,19 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     setThreads((all) => ({ ...all, [k]: fn(all[k] ?? EMPTY) }))
   }, [])
 
-  /** Streams an answer to `turns` (which ends with a user turn) into thread `k`. */
+  /** Shows `turns` (ending with the question) in thread `k` and streams the answer into it. */
   const run = useCallback(
-    async (k: string, turns: ChatTurn[], context: AssistantContext) => {
+    async (k: string, turns: ChatTurn[], body: ChatRequest) => {
       controllers.current.get(k)?.abort()
       const controller = new AbortController()
       controllers.current.set(k, controller)
-      patch(k, () => ({ turns: [...turns, { role: 'assistant', content: '' }], streaming: true }))
+      patch(k, (t) => ({
+        ...t,
+        turns: [...turns, { role: 'assistant', content: '' }],
+        streaming: true,
+        loading: false,
+        error: undefined,
+      }))
 
       // Batch token updates to one render per frame.
       let text = ''
@@ -86,10 +106,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       let error: string | undefined
       try {
         await api.assistant.chat(
-          turns,
-          context,
+          body,
           (e) => {
-            if (e.type === 'text') text += e.text
+            if (e.type === 'conversation') patch(k, (t) => ({ ...t, conversationId: e.id }))
+            else if (e.type === 'text') text += e.text
             else if (e.type === 'error') error = e.message
             if (!frame) frame = requestAnimationFrame(flush)
           },
@@ -104,6 +124,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           const answered = text.trim() !== ''
           const rest = t.turns.slice(0, -1)
           return {
+            ...t,
             turns: answered ? [...rest, { role: 'assistant', content: text }] : rest,
             streaming: false,
             error,
@@ -120,38 +141,93 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       if (!q) return
       const { context } = pageRef.current
       const k = threadKey(context)
-      const history = threadsRef.current[k]?.turns ?? []
-      if (threadsRef.current[k]?.streaming) return
-      const turn: ChatTurn = {
-        role: 'user',
+      const current = threadsRef.current[k]
+      if (current?.streaming) return
+      const message = {
         content: q,
         ...(quote && { quote }),
         ...(context.sectionTitle && { section: context.sectionTitle }),
       }
       setQuote(null)
-      void run(k, [...history, turn], context)
+      void run(k, [...(current?.turns ?? []), { role: 'user', ...message }], {
+        conversationId: current?.conversationId,
+        message,
+        context,
+      })
     },
     [quote, run],
   )
 
   const stop = useCallback(() => controllers.current.get(key)?.abort(), [key])
 
-  /** Re-asks the last question after an error. */
+  /** Re-asks the last question after an error (the server doesn't store it twice). */
   const retry = useCallback(() => {
-    const turns = thread.turns
-    if (thread.streaming || turns.at(-1)?.role !== 'user') return
-    void run(key, turns, page.context)
+    const last = thread.turns.at(-1)
+    if (thread.streaming || last?.role !== 'user') return
+    void run(key, thread.turns, {
+      conversationId: thread.conversationId,
+      message: {
+        content: last.content,
+        ...(last.quote && { quote: last.quote }),
+        ...(last.section && { section: last.section }),
+      },
+      retry: true,
+      context: page.context,
+    })
   }, [thread, key, page.context, run])
 
+  /** New chat: the old one stays stored (and in the history list). */
   const reset = useCallback(() => {
     controllers.current.get(key)?.abort()
-    setThreads((all) => {
-      const next = { ...all }
-      delete next[key]
-      return next
-    })
+    setThreads((all) => ({ ...all, [key]: EMPTY }))
     setQuote(null)
   }, [key])
+
+  const load = useCallback(
+    async (k: string, id: string) => {
+      const conversation = await api.assistant.conversation(id)
+      // Only if nothing was asked meanwhile.
+      patch(k, (t) =>
+        !t.loading
+          ? t
+          : {
+              turns: conversation.messages.map(({ role, content, quote, section, status }) => ({
+                role,
+                content,
+                quote,
+                section,
+                status,
+              })),
+              streaming: false,
+              conversationId: conversation.id,
+            },
+      )
+    },
+    [patch],
+  )
+
+  const openConversation = useCallback(
+    (id: string) => {
+      controllers.current.get(key)?.abort()
+      patch(key, () => ({ ...EMPTY, loading: true }))
+      load(key, id).catch(() => patch(key, () => ({ ...EMPTY, error: 'Could not load that conversation.' })))
+    },
+    [key, load, patch],
+  )
+
+  // When the assistant opens on a page for the first time, continue its latest stored conversation.
+  useEffect(() => {
+    if (!open || threadsRef.current[key]) return
+    const k = key
+    patch(k, () => ({ ...EMPTY, loading: true }))
+    api.assistant
+      .conversations({ ...conversationQuery(pageRef.current.context), limit: 1 })
+      .then(async ([latest]) => {
+        if (latest) await load(k, latest.id)
+      })
+      .catch(() => {})
+      .finally(() => patch(k, (t) => ({ ...t, loading: false })))
+  }, [open, key, load, patch])
 
   const setPage = useCallback((info: PageInfo | null) => setPageState(info ?? DEFAULT_PAGE), [])
 
@@ -183,7 +259,19 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const actions = useMemo(() => ({ setOpen, ask, setPage }), [ask, setPage])
-  const state: AssistantState = { open, page, quote, setQuote, thread, send, stop, retry, reset, focusSignal }
+  const state: AssistantState = {
+    open,
+    page,
+    quote,
+    setQuote,
+    thread,
+    send,
+    stop,
+    retry,
+    reset,
+    openConversation,
+    focusSignal,
+  }
 
   return (
     <ActionsContext.Provider value={actions}>

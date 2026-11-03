@@ -78,7 +78,7 @@ export function NotesList({
                 aria-label="Delete note"
                 title="Delete note"
                 onClick={() => onDelete(a.id)}
-                className="absolute top-1.5 right-1.5 grid size-6 place-items-center rounded-md opacity-0 transition group-hover:opacity-60 hover:bg-black/10 hover:!opacity-100 focus:opacity-100 dark:hover:bg-white/10"
+                className="absolute top-1.5 right-1.5 grid size-6 place-items-center rounded-md opacity-0 transition group-hover:opacity-60 [@media(hover:none)]:opacity-60 hover:bg-black/10 hover:!opacity-100 focus:opacity-100 dark:hover:bg-white/10"
                 style={{ color: 'var(--paper-ink)' }}
               >
                 <Trash2 className="size-3.5" />
