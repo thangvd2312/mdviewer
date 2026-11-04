@@ -44,7 +44,7 @@ function BlogHeader() {
     <header className="z-20 shrink-0 border-b border-line bg-surface/90 backdrop-blur supports-[backdrop-filter]:bg-surface/75">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4 sm:px-8">
         <Link
-          to={user ? '/blog' : '/features'}
+          to={user ? '/blog' : '/'}
           className="flex shrink-0 items-center gap-2"
           aria-label={user ? 'viewmd Blog — home' : 'viewmd — home'}
         >
@@ -52,10 +52,10 @@ function BlogHeader() {
           <span className="text-[16px] font-semibold tracking-tight max-[360px]:hidden">viewmd</span>
         </Link>
         <nav className="ml-2 flex items-center gap-0.5 sm:ml-4" aria-label="Site">
-          <HeaderTab to="/features" active={location.pathname.startsWith('/features')}>
+          <HeaderTab to="/" active={location.pathname === '/'}>
             Features
           </HeaderTab>
-          <HeaderTab to="/blog" active={!location.pathname.startsWith('/features')}>
+          <HeaderTab to="/blog" active={location.pathname !== '/'}>
             Blog
           </HeaderTab>
         </nav>
@@ -63,12 +63,12 @@ function BlogHeader() {
           <ThemeToggle />
           {user ? (
             <>
-              <Link to="/" className={buttonClass('secondary', 'ml-1 h-9 rounded-full px-3.5')}>
+              <Link to="/note" className={buttonClass('secondary', 'ml-1 h-9 rounded-full px-3.5')}>
                 <LibraryBig className="size-4" />
                 <span className="max-sm:hidden">My notes</span>
               </Link>
               <Link
-                to={user.githubLogin ? `/u/${user.githubLogin}` : '/'}
+                to={user.githubLogin ? `/u/${user.githubLogin}` : '/note'}
                 className="ml-1 rounded-full"
                 title="Your public profile"
               >
@@ -119,13 +119,16 @@ export function BlogFooter() {
           <Link to="/blog" className="hover:text-ink">
             All posts
           </Link>
-          <Link to="/features" className="hover:text-ink">
+          <Link to="/" className="hover:text-ink">
             Features
           </Link>
-          <Link to="/features#app" className="hover:text-ink">
+          <Link to="/#app" className="hover:text-ink">
             Get the app
           </Link>
-          <Link to={user ? '/' : '/login'} className="flex items-center gap-1.5 font-medium text-ink hover:underline">
+          <Link
+            to={user ? '/note' : '/login'}
+            className="flex items-center gap-1.5 font-medium text-ink hover:underline"
+          >
             <PenLine className="size-3.5" /> {user ? 'Write a post' : 'Start writing'}
           </Link>
         </div>

@@ -26,7 +26,7 @@ export function DeleteDocButton({ doc, className }: { doc: DocSummary; className
     setOpen(false)
     toast('Document deleted')
     // Leave the page if it was showing the deleted doc.
-    if (location.pathname.startsWith(`/d/${doc.id}`)) navigate('/', { replace: true })
+    if (location.pathname.startsWith(`/d/${doc.id}`)) navigate('/note', { replace: true })
   }
 
   return (

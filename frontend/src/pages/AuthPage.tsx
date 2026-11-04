@@ -25,7 +25,7 @@ export function LoginPage() {
 
   if (user) {
     const from = (location.state as { from?: string } | null)?.from
-    return <Navigate to={from?.startsWith('/') ? from : '/'} replace />
+    return <Navigate to={from?.startsWith('/') ? from : '/note'} replace />
   }
 
   const start = () => {
@@ -79,7 +79,7 @@ export function LoginPage() {
             Or read the blog — no account needed →
           </Link>
           <Link
-            to="/features"
+            to="/"
             className="mt-2 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-ink-muted hover:text-ink"
           >
             See everything viewmd can do →
@@ -115,15 +115,15 @@ export function AuthCallbackPage() {
       return
     }
 
-    let returnTo = '/'
+    let returnTo = '/note'
     try {
-      returnTo = sessionStorage.getItem(RETURN_TO_KEY) ?? '/'
+      returnTo = sessionStorage.getItem(RETURN_TO_KEY) ?? '/note'
       sessionStorage.removeItem(RETURN_TO_KEY)
     } catch {
       /* ignore */
     }
     acceptToken(token)
-      .then(() => navigate(returnTo.startsWith('/') ? returnTo : '/', { replace: true }))
+      .then(() => navigate(returnTo.startsWith('/') ? returnTo : '/note', { replace: true }))
       .catch(() => navigate('/login?error=github_failed', { replace: true }))
   }, [acceptToken, navigate])
 

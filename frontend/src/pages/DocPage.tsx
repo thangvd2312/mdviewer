@@ -134,7 +134,7 @@ export function DocPage() {
     await del.mutateAsync(doc.id)
     setConfirmDelete(false)
     toast('Document deleted')
-    navigate(project ? `/p/${project.id}` : '/', { replace: true })
+    navigate(project ? `/p/${project.id}` : '/note', { replace: true })
   }
 
   return (

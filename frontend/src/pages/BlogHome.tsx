@@ -270,7 +270,7 @@ function WriteCard({ signedIn }: { signedIn: boolean }) {
           ? 'Open any of your notes and choose Share → Public on the web to post it here.'
           : 'Keep your Markdown notes in one place, read them beautifully, and publish the ones worth sharing.'}
       </p>
-      <Link to={signedIn ? '/' : '/login'} className={buttonClass('primary', 'mt-4 h-9 rounded-full px-4')}>
+      <Link to={signedIn ? '/note' : '/login'} className={buttonClass('primary', 'mt-4 h-9 rounded-full px-4')}>
         {signedIn ? 'Go to my notes' : 'Start writing — it’s free'} <ArrowRight className="size-4" />
       </Link>
     </section>

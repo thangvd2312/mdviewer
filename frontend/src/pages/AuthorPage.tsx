@@ -101,7 +101,7 @@ export function AuthorPage() {
             </div>
           </div>
           {isMe && (
-            <Link to="/" className={buttonClass('secondary', 'h-9 rounded-full px-4')}>
+            <Link to="/note" className={buttonClass('secondary', 'h-9 rounded-full px-4')}>
               Publish a note
             </Link>
           )}

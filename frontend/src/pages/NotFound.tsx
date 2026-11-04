@@ -11,7 +11,7 @@ export function NotFound({ what = 'page' }: { what?: string }) {
           <FileQuestion className="mx-auto size-10 text-ink-faint" strokeWidth={1.5} />
           <h1 className="mt-4 text-[18px] font-semibold">This {what} doesn’t exist</h1>
           <p className="mt-1 text-[14px] text-ink-muted">It may have been deleted, or the link is wrong.</p>
-          <Link to="/" className="mt-5 inline-block text-[14px] font-medium text-accent hover:underline">
+          <Link to="/note" className="mt-5 inline-block text-[14px] font-medium text-accent hover:underline">
             Back home
           </Link>
         </div>

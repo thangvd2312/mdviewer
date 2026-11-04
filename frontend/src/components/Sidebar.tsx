@@ -82,7 +82,7 @@ export function Sidebar() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-12 shrink-0 items-center gap-1 pr-2 pl-4">
-        <Link to="/" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
+        <Link to="/note" className="flex items-center gap-2 text-[15px] font-semibold tracking-tight">
           <Logo className="size-5.5" />
           viewmd
         </Link>
@@ -115,7 +115,7 @@ export function Sidebar() {
           Blog
         </NavLink>
         {!installApp.installed && (
-          <NavLink to="/features#app" className={rowClass}>
+          <NavLink to="/#app" className={rowClass}>
             <Smartphone className="size-4 text-ink-muted" />
             Get the app
           </NavLink>

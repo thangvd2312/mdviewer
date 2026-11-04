@@ -35,14 +35,14 @@ import { useAuth } from '../lib/auth'
 import { useInstallApp, type Platform } from '../lib/pwa'
 import { useUI } from '../lib/ui'
 
-/** The product page: what viewmd does, how to connect an AI agent, and how to install it as an app. /features */
+/** The product page at the site root: what viewmd does, how to connect an AI agent, and how to install it as an app. */
 export function FeaturesPage() {
   const { user } = useAuth()
   usePageAssistant(user ? { context: { page: 'other' }, title: 'Features' } : null)
 
   useEffect(() => {
     document.title = 'viewmd — Markdown notes you read, remember and share'
-    // Arriving at /features#agents (e.g. back from signing in): scroll the section into view.
+    // Arriving at /#agents (e.g. back from signing in): scroll the section into view.
     const id = window.location.hash.slice(1)
     if (id) requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView())
     return () => {
@@ -213,7 +213,7 @@ function Hero() {
           words that matter, ask an AI that has read the page, and review until it sticks.
         </p>
         <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
-          <Link to={user ? '/' : '/login'} className={buttonClass('primary', 'h-12 rounded-full px-7 text-[15px]')}>
+          <Link to={user ? '/note' : '/login'} className={buttonClass('primary', 'h-12 rounded-full px-7 text-[15px]')}>
             {user ? 'Open my notes' : 'Get started — it’s free'} <ArrowRight className="size-4" />
           </Link>
           <a href="#app" className={buttonClass('secondary', 'h-12 rounded-full px-6 text-[15px]')}>
@@ -506,7 +506,7 @@ function Agents() {
               ) : (
                 <Link
                   to="/login"
-                  state={{ from: '/features#agents' }}
+                  state={{ from: '/#agents' }}
                   className={buttonClass('primary', 'mt-4 h-10 rounded-full px-5')}
                 >
                   Sign in to create a token

@@ -44,15 +44,15 @@ function RequireAuth({ children }: { children: ReactNode }) {
       </div>
     )
   }
-  // Visitors who aren't signed in land on the product page first; other app pages ask them to sign in.
-  if (!user && location.pathname === '/') return <Navigate to="/features" replace />
+  // Visitors who aren't signed in are shown the product page instead of the notes home; other app pages ask them to sign in.
+  if (!user && location.pathname === '/note') return <Navigate to="/" replace />
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
   return children
 }
 
 function RedirectTo({ to, keepSearch }: { to: string; keepSearch?: boolean }) {
-  const { search } = useLocation()
-  return <Navigate to={to + (keepSearch ? search : '')} replace />
+  const { search, hash } = useLocation()
+  return <Navigate to={to + (keepSearch ? search + hash : '')} replace />
 }
 
 function OldPostRedirect() {
@@ -72,11 +72,12 @@ const router = createBrowserRouter([
       { path: 'blog', element: <BlogHome /> },
       { path: 'blog/:slug', element: <BlogPost /> },
       { path: 'u/:login', element: <AuthorPage /> },
-      { path: 'features', element: <FeaturesPage /> },
+      { index: true, element: <FeaturesPage /> },
     ],
   },
   // Old addresses of the blog.
   { path: '/explore', element: <RedirectTo to="/blog" keepSearch /> },
+  { path: '/features', element: <RedirectTo to="/" keepSearch /> },
   { path: '/s/:slug', element: <OldPostRedirect /> },
   {
     element: (
@@ -85,7 +86,7 @@ const router = createBrowserRouter([
       </RequireAuth>
     ),
     children: [
-      { index: true, element: <HomePage /> },
+      { path: 'note', element: <HomePage /> },
       { path: 'new', element: <EditorPage /> },
       { path: 'd/:id', element: <DocPage /> },
       { path: 'd/:id/edit', element: <EditorPage /> },

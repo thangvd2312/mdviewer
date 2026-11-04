@@ -4,7 +4,7 @@
   "short_name": "viewmd",
   "description": "Read Markdown beautifully, pin sticky notes, ask an AI about the page, review with spaced repetition and publish to the blog.",
   "lang": "en",
-  "start_url": "/",
+  "start_url": "/note",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",

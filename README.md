@@ -85,7 +85,7 @@ Trợ lý gọi bất kỳ endpoint nào tương thích OpenAI Chat Completions.
 
 ### Blog: tài liệu public và bình luận
 
-- **Blog công khai** (không cần đăng nhập; người chưa đăng nhập vào `/` sẽ tới trang giới thiệu `/features` trước, từ đó qua tab *Blog*):
+- **Blog công khai** (không cần đăng nhập; trang chủ `/` là trang giới thiệu, từ đó qua tab *Blog*):
   - `/blog` — bài mới nhất nổi bật, danh sách bài (tìm kiếm, *Latest* / *Most read*), cột bên có *Most read* và *Topics*; `/blog?topic=<chủ đề>` lọc theo chủ đề.
   - `/blog/<slug>` — bài viết, khung tác giả + *More from…*, bình luận.
   - `/u/<login>` — trang tác giả: số bài, lượt xem, các bài đã đăng.
@@ -120,8 +120,8 @@ viewmd có sẵn một MCP server (streamable HTTP) tại `https://<site>/api/mc
 
 ### Trang giới thiệu và cài như app (PWA)
 
-- **`/features`** — trang giới thiệu công khai, là trang đầu tiên khách chưa đăng nhập thấy khi vào `/` (tab *Features* trên header blog, link ở trang đăng nhập, footer và mục *Get the app* trong sidebar): ảnh chụp thật của từng tính năng (đọc/viết, sticky note, trợ lý, ôn tập, blog), hướng dẫn kết nối AI agent qua MCP (lệnh cho Claude Code / Codex / Cursor dùng đúng địa chỉ site, nút tạo token), cách cài app trên iPhone/Android/máy tính và FAQ. Có thẻ Open Graph riêng. Ảnh nằm ở `frontend/public/landing/` (WebP).
-- **Cài như app bình thường**: `manifest.webmanifest` (tên, icon thường + maskable, shortcut *New note / Review / Blog*, ảnh chụp cho hộp thoại cài) và service worker `sw.js`. Chrome/Edge (Android, máy tính) hiện nút **Install viewmd** ngay trên trang; iPhone/iPad dùng Safari → Share → *Add to Home Screen* (trang tự nhận ra thiết bị và làm nổi bật hướng dẫn phù hợp). Mở từ icon thì chạy toàn màn hình, thanh trạng thái đổi màu theo theme sáng/tối.
+- **`/`** (trang chủ) — trang giới thiệu công khai, ai vào domain cũng thấy trước tiên; trang cá nhân (ghi chú của bạn) nằm ở **`/note`**. Link cũ `/features` chuyển hướng 301 về `/`. Tới trang giới thiệu từ tab *Features* trên header blog, link ở trang đăng nhập, footer và mục *Get the app* trong sidebar. Nội dung: ảnh chụp thật của từng tính năng (đọc/viết, sticky note, trợ lý, ôn tập, blog), hướng dẫn kết nối AI agent qua MCP (lệnh cho Claude Code / Codex / Cursor dùng đúng địa chỉ site, nút tạo token), cách cài app trên iPhone/Android/máy tính và FAQ. Có thẻ Open Graph riêng. Ảnh nằm ở `frontend/public/landing/` (WebP).
+- **Cài như app bình thường**: `manifest.webmanifest` (tên, icon thường + maskable, shortcut *New note / Review / Blog*, ảnh chụp cho hộp thoại cài) và service worker `sw.js`. Chrome/Edge (Android, máy tính) hiện nút **Install viewmd** ngay trên trang; iPhone/iPad dùng Safari → Share → *Add to Home Screen* (trang tự nhận ra thiết bị và làm nổi bật hướng dẫn phù hợp). Mở từ icon thì vào thẳng `/note`, chạy toàn màn hình, thanh trạng thái đổi màu theo theme sáng/tối.
 - **Service worker**: trang luôn lấy từ mạng (deploy mới hiện ngay), file `/assets/*` (tên có hash) được cache sau lần tải đầu, không đụng tới `/api`. Mất mạng thì hiện trang *You're offline* thay vì lỗi trình duyệt. `sw.js` và manifest được trả với `Cache-Control: no-cache`.
 
 ### Phím tắt

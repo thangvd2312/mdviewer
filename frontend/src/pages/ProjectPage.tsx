@@ -43,7 +43,7 @@ export function ProjectPage() {
   const remove = async () => {
     await del.mutateAsync(project.id)
     toast(`Deleted ${project.name}`)
-    navigate('/', { replace: true })
+    navigate('/note', { replace: true })
   }
 
   return (
