@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { Avatar } from '../components/Avatar'
 import { BlogFooter } from '../components/blog/BlogLayout'
-import { authorUrl, PostRow, postUrl, Topics } from '../components/blog/Posts'
+import { AiBadge, authorUrl, PostRow, postUrl, Topics } from '../components/blog/Posts'
 import { Comments } from '../components/comments/Comments'
 import { OutlineNav, useActiveHeading, useHeadings } from '../components/DocOutline'
 import { MarkdownView } from '../components/MarkdownView'
@@ -125,6 +125,15 @@ export function BlogPost() {
             <h1>{title || doc.title}</h1>
           </div>
           <Byline doc={doc} />
+          {doc.author.system && (
+            <p className="-mt-3 mb-8 flex gap-2.5 rounded-2xl border border-violet-500/20 bg-violet-500/[0.06] px-4 py-3 text-[13.5px] leading-relaxed text-ink-muted">
+              <Sparkles className="mt-0.5 size-4 shrink-0 text-violet-500" />
+              <span>
+                Written by viewmd’s AI editor from the sources at the end of the post, and checked by a second AI before
+                publishing. Spotted a mistake? Tell us in the comments.
+              </span>
+            </p>
+          )}
           <MarkdownView content={body} />
 
           <div className="mt-12 flex flex-wrap items-center gap-2 border-t border-line pt-6">
@@ -223,6 +232,7 @@ function Byline({ doc }: { doc: PublicDoc }) {
             title={`${author.name}’s profile`}
           >
             {author.name}
+            {author.system && <AiBadge className="ml-1.5 align-[1px]" />}
           </Link>
         ) : (
           <span className="block truncate text-[14px] font-semibold">{author.name}</span>

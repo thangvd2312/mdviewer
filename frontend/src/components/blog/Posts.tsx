@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Clock, Eye, MessageCircle } from 'lucide-react'
+import { Clock, Eye, MessageCircle, Sparkles } from 'lucide-react'
 import { Link } from 'react-router'
 import type { PublicDocSummary } from '../../lib/api'
 import { timeAgo } from '../../lib/format'
@@ -10,6 +10,19 @@ export const authorUrl = (login: string) => `/u/${encodeURIComponent(login)}`
 export const topicUrl = (topic: string) => `/blog?topic=${encodeURIComponent(topic)}`
 const compact = (n: number) => new Intl.NumberFormat('en', { notation: 'compact' }).format(n)
 
+/** Marks posts written by the site's AI editor. */
+export const AiBadge = ({ className }: { className?: string }) => (
+  <span
+    className={clsx(
+      'inline-flex shrink-0 items-center gap-0.5 rounded-full bg-violet-500/12 px-1.5 py-px text-[10.5px] font-semibold text-violet-700 dark:text-violet-300',
+      className,
+    )}
+    title="Written by AI from the sources listed in the post"
+  >
+    <Sparkles className="size-2.5" /> AI
+  </span>
+)
+
 /** Author · date. Links to the author's page. */
 function Byline({ doc, size = 'sm' }: { doc: PublicDocSummary; size?: 'sm' | 'md' }) {
   const a = doc.author
@@ -17,6 +30,7 @@ function Byline({ doc, size = 'sm' }: { doc: PublicDocSummary; size?: 'sm' | 'md
     <>
       <Avatar name={a.name} src={a.avatarUrl} className={size === 'md' ? 'size-7' : 'size-5'} />
       <span className="truncate font-medium text-ink-muted group-hover/author:text-ink">{a.name}</span>
+      {a.system && <AiBadge />}
     </>
   )
   return (

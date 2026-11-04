@@ -181,6 +181,37 @@ export class QuotaService {
     return [plan, ...rest];
   }
 
+  /** The main model with its fallbacks, and the cheap model — for system jobs that don't use anyone's allowance. */
+  systemChains() {
+    return { full: this.chain(this.full), saver: this.chain(this.saver) };
+  }
+
+  /** How much of today's shared token budget is used (0–1; 0 when there's no budget). */
+  async globalShare() {
+    if (this.globalTokens <= 0) return 0;
+    return (await this.tokens({ day: this.today() })) / this.globalTokens;
+  }
+
+  /** Records a call made by a system job (the blog curator), so it counts towards the shared budget. */
+  async recordSystem(ownerId: string, plan: Plan, tokens: { prompt: number; completion: number }) {
+    await this.usage
+      .save(
+        this.usage.create({
+          ownerId,
+          kind: 'curate',
+          tier: plan.tier,
+          model: plan.model,
+          promptTokens: tokens.prompt,
+          completionTokens: tokens.completion,
+          day: this.today(),
+          createdAt: new Date(),
+        }),
+      )
+      .catch((e: unknown) =>
+        this.logger.error(`recording usage failed: ${e instanceof Error ? e.message : String(e)}`),
+      );
+  }
+
   /** Stores the tokens an answer used (and the model that wrote it) — or, when nothing was answered, un-counts the question. */
   async settle(record: Usage, tokens: { prompt: number; completion: number } | null, model?: string) {
     try {

@@ -4,6 +4,7 @@ import {
   Brain,
   ChevronRight,
   Compass,
+  Newspaper,
   Smartphone,
   FileText,
   Globe,
@@ -114,6 +115,12 @@ export function Sidebar() {
           <Compass className="size-4 text-ink-muted" />
           Blog
         </NavLink>
+        {user?.isAdmin && (
+          <NavLink to="/admin/curator" className={rowClass}>
+            <Newspaper className="size-4 text-ink-muted" />
+            Blog curator
+          </NavLink>
+        )}
         {!installApp.installed && (
           <NavLink to="/#app" className={rowClass}>
             <Smartphone className="size-4 text-ink-muted" />

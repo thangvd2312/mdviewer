@@ -21,6 +21,10 @@ export class User {
   @Column({ type: 'varchar', length: 500, nullable: true })
   avatarUrl: string | null;
 
+  /** An account the site itself writes with (e.g. the blog curator); nobody signs in as it. */
+  @Column({ default: false })
+  isSystem: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 }

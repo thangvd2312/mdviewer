@@ -107,6 +107,22 @@ Mục **Review** trong sidebar (có số câu đến hạn):
 - Trả lời bằng chữ rồi **Check with AI** (model rẻ) để được chấm và giải thích; đáp án có link tới đúng mục trong tài liệu. Phím tắt: Space hiện đáp án, 1–4 để chấm.
 - Trong tài liệu: menu ⋯ → **Quiz me on this** để ôn riêng tài liệu đó.
 
+### Blog tự động từ daily.dev (curator)
+
+Mỗi ngày (sau `CURATOR_HOUR`, mặc định 7 giờ sáng giờ Việt Nam) một worker trong backend tìm bài hay trên [daily.dev](https://daily.dev) theo các chủ đề trong `CURATOR_TOPICS`, rồi viết lại thành bài tiếng Việt đăng lên blog dưới tài khoản hệ thống **viewmd Editorial** (`/u/viewmd-editorial`, bài có nhãn *AI* và dòng giải thích ở đầu bài):
+
+1. **Tìm**: bài được bàn nhiều nhất 7 và 30 ngày qua cùng bài mới theo từng chủ đề (daily.dev Public API). Chỉ giữ bài viết thật, đọc ≥ 4 phút, ≤ 35 ngày, có đủ tín hiệu (upvote + 2×bình luận ≥ `CURATOR_MIN_SIGNAL`), chưa từng xét. Model rẻ đọc nhanh tiêu đề + tóm tắt của ~60 bài nhiều tín hiệu nhất, gạt bản phát hành, quảng cáo sản phẩm, tin tức, bài cảm nghĩ, listicle… rồi chọn `CURATOR_SHORTLIST` bài để đọc kỹ.
+2. **Đọc bài gốc** (Readability → Markdown). Chỉ gọi tới địa chỉ public — chặn localhost, IP nội bộ, cổng lạ, để server không bị lợi dụng gọi vào mạng nội bộ.
+3. **Chấm** (model rẻ): độ sâu, insight, tính thực tế, độ tin cậy, giá trị lâu dài, dễ dạy thành bài học. Đạt ≥ `CURATOR_MIN_SCORE` (8) mới viết; bài tốt mà chưa tới lượt được giữ lại cho hôm sau.
+4. **Tìm hiểu thêm**: đọc tối đa 4 link trong bài mà người chấm chọn (docs, spec, bài gốc nó dựa vào) và các bình luận hay trên daily.dev.
+5. **Viết** (model chính): bài gốc tiếng Việt, không dịch hay chép câu — mở bài nêu vấn đề, *Tóm tắt*, các phần từ dễ tới khó, ví dụ từng bước có code, sơ đồ Mermaid, bảng so sánh, *Những lỗi hay gặp*, *Khi nào nên dùng*, *Ghi nhớ nhanh*, *Nguồn tham khảo* có link về bài gốc.
+6. **Biên tập** (ưu tiên một model khác): soát lỗi kiến thức so với nguồn, độ dễ hiểu, tiếng Việt, cấu trúc; chưa đạt thì viết lại và chấm lại, tối đa 2 vòng.
+7. **Đăng**: biên tập chấm ≥ `CURATOR_PUBLISH_SCORE` (8.5) và không còn lỗi bắt buộc sửa thì public; còn lại thành bản nháp.
+
+Mặc định `CURATOR_DAILY_POSTS=2` bài/ngày. Token AI của curator được tính vào ngân sách chung trong ngày; khi đã dùng quá `CURATOR_MAX_GLOBAL_SHARE` (50%) curator tự dừng để dành cho người đọc. Admin (`ADMIN_USERS`, mặc định giống `ASSISTANT_UNLIMITED_USERS`) có trang **Blog curator** (`/admin/curator`, trong sidebar): chạy ngay, xem log từng lần chạy, điểm của từng bài và lý do, đọc bản nháp, *Publish* / *Unpublish*, *Write again*.
+
+Cấu hình trong `backend/.env`: `DAILYDEV_TOKEN` (Personal Access Token tạo ở daily.dev/settings/api — bắt buộc, không có thì curator nghỉ), `CURATOR_TOPICS`, `CURATOR_DAILY_POSTS`, `CURATOR_HOUR`, `CURATOR_MIN_SCORE`, `CURATOR_PUBLISH_SCORE`, `CURATOR_SHORTLIST` (6), `CURATOR_MIN_SIGNAL` (5), `CURATOR_MAX_GLOBAL_SHARE`, `CURATOR_ENABLED=false` để tắt chạy tự động (vẫn bấm *Run now* được).
+
 ### Kết nối AI agent (MCP)
 
 viewmd có sẵn một MCP server (streamable HTTP) tại `https://<site>/api/mcp`, để Claude Code, Codex, Cursor… lưu và tra cứu ghi chú của bạn. Ví dụ: *"Lưu những gì vừa tìm hiểu về Redis vào viewmd, project Backend"*.
@@ -177,6 +193,10 @@ Tất cả route (trừ `auth/github*`) cần header `Authorization: Bearer <tok
 | POST | `/api/review/cards/:id/answer` | `{ rating: again\|hard\|good\|easy }` — lên lịch lần ôn sau |
 | POST | `/api/review/cards/:id/check` | `{ answer }` — AI chấm câu trả lời |
 | DELETE | `/api/review/cards/:id` | Bỏ câu hỏi |
+| GET | `/api/curator` | (admin) Trạng thái curator, các lần chạy, các bài đã xét |
+| POST | `/api/curator/run` | (admin) Chạy ngay |
+| GET | `/api/curator/articles/:id` | (admin) Đọc bài đã viết |
+| POST | `/api/curator/articles/:id/publish` · `/unpublish` · `/rewrite` | (admin) Đăng / gỡ / viết lại |
 
 Nội dung tối đa khoảng 2 triệu ký tự (body JSON giới hạn 5 MB).
 
@@ -193,6 +213,7 @@ Cloudflare (HTTPS) ── cloudflared tunnel ──► 127.0.0.1:4100  pm2 "mdvi
 - **CI/CD** (`.github/workflows/deploy.yml`): mỗi lần push hoặc mở PR sẽ chạy typecheck, lint và build trên runner của GitHub. Riêng push lên `main` thì sẽ deploy thêm qua self-hosted runner trên server (label `mdviewer`): rsync code vào `~/apps/mdviewer`, `npm run install:all`, `npm run build`, `pm2 startOrReload`, rồi gọi `/api/health` để kiểm tra.
 - **Cấu hình server**: file `~/apps/mdviewer/.env` (xem mẫu ở `.env.production.example`). File này không được commit và rsync cũng không ghi đè lên nó.
 - **Key của trợ lý AI**: lưu trong GitHub secret `ASSISTANT_API_KEY` (repo public nên không để trong code). Mỗi lần deploy, workflow ghi `ASSISTANT_API_KEY`, `ASSISTANT_BASE_URL` (biến `vars.ASSISTANT_BASE_URL`, mặc định router 9router) và `ASSISTANT_UNLIMITED_USERS` (biến `vars.ASSISTANT_UNLIMITED_USERS`, mặc định `thangvd2312`) vào `.env` trên server. Đổi key: `gh secret set ASSISTANT_API_KEY` rồi chạy lại workflow.
+- **Token daily.dev của curator**: GitHub secret `DAILYDEV_TOKEN`; mỗi lần deploy được ghi vào `.env` trên server (không có secret thì curator nghỉ).
 - **Database**: migration (`backend/src/migrations`) tự chạy mỗi khi app khởi động (`DB_MIGRATIONS_RUN=true`). Khi đổi entity thì tạo migration mới:
   ```bash
   cd backend && DB_NAME=<db trống hoặc khớp schema hiện tại> npm run migration:generate -- src/migrations/<TenMigration>

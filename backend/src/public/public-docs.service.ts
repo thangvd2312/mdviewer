@@ -10,6 +10,8 @@ export interface PublicAuthor {
   name: string;
   login: string | null;
   avatarUrl: string | null;
+  /** Written by the site (AI-curated posts), not a person. */
+  system: boolean;
 }
 
 export interface PublicDocSummary {
@@ -63,6 +65,7 @@ export class PublicDocsService {
         'u.name AS authorName',
         'u.githubLogin AS authorLogin',
         'u.avatarUrl AS authorAvatar',
+        'u.isSystem AS authorSystem',
       ])
       .addSelect(
         (sub) =>
@@ -101,7 +104,7 @@ export class PublicDocsService {
   async author(login: string) {
     const user = await this.docs.manager.findOne(User, {
       where: { githubLogin: login },
-      select: { id: true, name: true, githubLogin: true, avatarUrl: true, createdAt: true },
+      select: { id: true, name: true, githubLogin: true, avatarUrl: true, isSystem: true, createdAt: true },
     });
     if (!user) throw new NotFoundException('There’s no author with that name.');
     const stats = await this.docs
@@ -220,10 +223,16 @@ export class PublicDocsService {
   }
 }
 
-export const author = (u: { name: string; githubLogin: string | null; avatarUrl: string | null }): PublicAuthor => ({
+export const author = (u: {
+  name: string;
+  githubLogin: string | null;
+  avatarUrl: string | null;
+  isSystem?: boolean;
+}): PublicAuthor => ({
   name: u.name,
   login: u.githubLogin,
   avatarUrl: u.avatarUrl,
+  system: u.isSystem === true,
 });
 
 /** Same rule as the reader's "N min read": 220 words a minute, at least 1. */
@@ -252,6 +261,7 @@ function toSummary(r: Record<string, unknown>): PublicDocSummary {
       name: String(r.authorName),
       login: (r.authorLogin as string | null) ?? null,
       avatarUrl: (r.authorAvatar as string | null) ?? null,
+      system: Number(r.authorSystem ?? 0) === 1 || r.authorSystem === true,
     },
   };
 }

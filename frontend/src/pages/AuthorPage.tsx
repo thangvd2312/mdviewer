@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { Avatar } from '../components/Avatar'
 import { BlogFooter } from '../components/blog/BlogLayout'
-import { PostRow, PostsSkeleton } from '../components/blog/Posts'
+import { AiBadge, PostRow, PostsSkeleton } from '../components/blog/Posts'
 import { Button, buttonClass, Spinner } from '../components/ui'
 import { ApiError } from '../lib/api'
 import { useAuth } from '../lib/auth'
@@ -79,16 +79,25 @@ export function AuthorPage() {
             initialsClass="text-[22px] sm:text-[26px]"
           />
           <div className="min-w-0 flex-1">
-            <h1 className="text-[26px] leading-tight font-semibold tracking-tight sm:text-[30px]">{a.name}</h1>
-            {a.login && (
-              <a
-                href={`https://github.com/${a.login}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[14px] text-ink-muted hover:text-ink hover:underline"
-              >
-                @{a.login}
-              </a>
+            <h1 className="text-[26px] leading-tight font-semibold tracking-tight sm:text-[30px]">
+              {a.name}
+              {a.system && <AiBadge className="ml-2 align-[5px]" />}
+            </h1>
+            {a.system ? (
+              <p className="text-[14px] text-ink-muted">
+                In-depth Vietnamese explainers, researched and written by AI from the best articles on daily.dev.
+              </p>
+            ) : (
+              a.login && (
+                <a
+                  href={`https://github.com/${a.login}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[14px] text-ink-muted hover:text-ink hover:underline"
+                >
+                  @{a.login}
+                </a>
+              )
             )}
             <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[13.5px] text-ink-muted">
               <span>

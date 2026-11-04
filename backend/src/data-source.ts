@@ -5,6 +5,7 @@ import { DataSource } from 'typeorm';
 import { Annotation } from './annotations/annotation.entity';
 import { Conversation, Message } from './assistant/conversation.entity';
 import { Usage } from './assistant/usage.entity';
+import { CuratedArticle, CuratorRun } from './curator/curator.entity';
 import { Comment, CommentBlock } from './public/comment.entity';
 import { ApiToken } from './tokens/api-token.entity';
 import { ReviewCard, ReviewEvent } from './review/review.entity';
@@ -20,6 +21,21 @@ export default new DataSource({
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   charset: 'utf8mb4_unicode_ci',
-  entities: [User, Project, Doc, Annotation, Conversation, Message, Usage, Comment, CommentBlock, ApiToken, ReviewCard, ReviewEvent],
+  entities: [
+    User,
+    Project,
+    Doc,
+    Annotation,
+    Conversation,
+    Message,
+    Usage,
+    Comment,
+    CommentBlock,
+    ApiToken,
+    ReviewCard,
+    ReviewEvent,
+    CuratedArticle,
+    CuratorRun,
+  ],
   migrations: [__dirname + '/migrations/*.js'],
 });
