@@ -446,6 +446,58 @@ body {
   margin-bottom: 0;
 }
 
+/* A review question: big and bold, with inline code and code blocks rendered properly. */
+.markdown.question {
+  font-size: 21px;
+  line-height: 1.45;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+@media (min-width: 640px) {
+  .markdown.question {
+    font-size: 24px;
+  }
+}
+.markdown.question :is(p, ul, ol) {
+  margin-bottom: 0.55em;
+}
+/* Keep a short code span on one line (it moves to the next line whole); a long one wraps inside its pill. */
+.markdown:is(.question, .asked) :not(pre) > code {
+  display: inline-block;
+  max-width: 100%;
+  line-height: 1.35;
+}
+.markdown.question :not(pre) > code {
+  font-size: 0.8em;
+  font-weight: 500;
+  padding: 0.08em 0.38em;
+}
+.markdown.question :is(.code-card, pre) {
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.6;
+}
+.markdown.question > :last-child,
+.markdown.asked > :last-child {
+  margin-bottom: 0;
+}
+/* "You asked: …" — the learner's own question, in one quiet line. */
+.markdown.asked {
+  font-size: inherit;
+  line-height: 1.5;
+  color: inherit;
+}
+.markdown.asked p {
+  margin: 0;
+}
+.markdown.asked p::before {
+  content: '“';
+}
+.markdown.asked p:last-child::after {
+  content: '”';
+}
+
 @keyframes pop-in {
   from {
     opacity: 0;

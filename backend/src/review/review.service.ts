@@ -261,6 +261,7 @@ Write ${want} review questions about this document.${
 - If there are learner questions, about half of yours should check exactly what the learner asked about — the thing they were unsure of — with origin "asked" and basedOn set to the learner's question it comes from (verbatim). If a sticky note marks something as important, a definition, a question or a to-do, you may build a question on it with origin "note". The rest test the ideas most worth remembering, with origin "key".
 - Each question must be answerable from memory, without the document in front of you, and be self-contained (name the concept; don't say "in this section").
 - Prefer understanding over trivia: why, how, when to use which, differences, consequences, small applied scenarios. No yes/no questions, no questions about the document itself.
+- question: Markdown. Put code, identifiers, types and commands in backticks (e.g. \`List<? extends T>\`, \`HashMap\`). If the question is about a snippet of code, put the snippet (at most ~12 lines) in a fenced code block with its language, after the question text.
 - answer: the correct answer in 1–3 sentences (Markdown allowed, code in backticks).
 - section: the exact text of the heading the answer is found under, or null.
 - Vary them, and spread them over the document.
@@ -517,7 +518,7 @@ function parseCards(text: string, askedQuestions: Set<string>): DraftCard[] {
     }
     if (origin !== 'asked') basedOn = null;
     out.push({
-      question: clip(question, 500),
+      question: clip(question, 1500),
       answer: clip(answer, 2000),
       section: typeof r.section === 'string' && r.section.trim() ? clip(r.section.trim(), 300) : null,
       origin,

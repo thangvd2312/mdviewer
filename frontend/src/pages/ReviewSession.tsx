@@ -312,13 +312,14 @@ function Run({ initial, quiz }: { initial: ReviewCard[]; quiz: boolean }) {
                 </span>
               )}
             </div>
-            <h1 className="mt-4 text-[21px] leading-snug font-semibold tracking-tight sm:text-[24px]">
-              {card.question}
-            </h1>
+            <div role="heading" aria-level={1} className="mt-4">
+              <MarkdownView content={card.question} className="question" />
+            </div>
             {card.origin === 'asked' && card.basedOn && (
-              <p className="mt-2 text-[13px] text-ink-faint">
-                You asked: <span className="italic">“{card.basedOn}”</span>
-              </p>
+              <div className="mt-2 flex gap-1 text-[13px] text-ink-faint">
+                <span className="shrink-0">You asked:</span>
+                <MarkdownView content={card.basedOn} className="asked min-w-0 italic" />
+              </div>
             )}
 
             {!revealed && (
@@ -355,7 +356,7 @@ function Run({ initial, quiz }: { initial: ReviewCard[]; quiz: boolean }) {
                           ? 'Partly right'
                           : 'Not quite'}
                     </div>
-                    <p className="mt-0.5 text-ink-muted">{verdict.feedback}</p>
+                    <MarkdownView content={verdict.feedback} className="compact mt-0.5 text-ink-muted" />
                   </div>
                 )}
                 {attempt.trim() && !verdict && (
