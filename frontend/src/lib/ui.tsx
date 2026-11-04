@@ -34,6 +34,10 @@ export function UIProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', resolvedTheme === 'dark')
+    // The status bar of the installed app follows the theme.
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', resolvedTheme === 'dark' ? '#17171a' : '#ffffff')
   }, [resolvedTheme])
 
   const setTheme = useCallback((t: ThemePref) => {

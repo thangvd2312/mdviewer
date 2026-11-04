@@ -118,6 +118,12 @@ viewmd có sẵn một MCP server (streamable HTTP) tại `https://<site>/api/mc
    - Client khác: `{"mcpServers":{"viewmd":{"url":"https://<site>/api/mcp","headers":{"Authorization":"Bearer <token>"}}}}`
 3. Tool: `save_note` (có thể kèm tên project — chưa có thì tạo), `append_to_note`, `update_note`, `search_notes`, `read_note`, `list_recent_notes`, `list_projects`. Agent **không** xoá hay publish được gì. Mỗi token chỉ thấy ghi chú của chủ token; giới hạn 60 lần ghi / 10 phút và 300 request / 5 phút mỗi token.
 
+### Trang giới thiệu và cài như app (PWA)
+
+- **`/features`** — trang giới thiệu công khai (tab *Features* trên header blog, link ở trang đăng nhập, footer và mục *Get the app* trong sidebar): ảnh chụp thật của từng tính năng (đọc/viết, sticky note, trợ lý, ôn tập, blog), hướng dẫn kết nối AI agent qua MCP (lệnh cho Claude Code / Codex / Cursor dùng đúng địa chỉ site, nút tạo token), cách cài app trên iPhone/Android/máy tính và FAQ. Có thẻ Open Graph riêng. Ảnh nằm ở `frontend/public/landing/` (WebP).
+- **Cài như app bình thường**: `manifest.webmanifest` (tên, icon thường + maskable, shortcut *New note / Review / Blog*, ảnh chụp cho hộp thoại cài) và service worker `sw.js`. Chrome/Edge (Android, máy tính) hiện nút **Install viewmd** ngay trên trang; iPhone/iPad dùng Safari → Share → *Add to Home Screen* (trang tự nhận ra thiết bị và làm nổi bật hướng dẫn phù hợp). Mở từ icon thì chạy toàn màn hình, thanh trạng thái đổi màu theo theme sáng/tối.
+- **Service worker**: trang luôn lấy từ mạng (deploy mới hiện ngay), file `/assets/*` (tên có hash) được cache sau lần tải đầu, không đụng tới `/api`. Mất mạng thì hiện trang *You're offline* thay vì lỗi trình duyệt. `sw.js` và manifest được trả với `Cache-Control: no-cache`.
+
 ### Phím tắt
 
 | Phím | Tác dụng |

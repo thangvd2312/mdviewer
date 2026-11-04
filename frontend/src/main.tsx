@@ -9,6 +9,7 @@ import { Spinner } from './components/ui'
 import './index.css'
 import { ApiError } from './lib/api'
 import { AuthProvider, useAuth } from './lib/auth'
+import { registerServiceWorker } from './lib/pwa'
 import { UIProvider } from './lib/ui'
 import { AuthCallbackPage, LoginPage } from './pages/AuthPage'
 import { DocPage } from './pages/DocPage'
@@ -16,6 +17,7 @@ import { EditorPage } from './pages/EditorPage'
 import { AuthorPage } from './pages/AuthorPage'
 import { BlogHome } from './pages/BlogHome'
 import { BlogPost } from './pages/BlogPost'
+import { FeaturesPage } from './pages/FeaturesPage'
 import { HomePage } from './pages/HomePage'
 import { NotFound } from './pages/NotFound'
 import { ProjectPage } from './pages/ProjectPage'
@@ -63,13 +65,14 @@ const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   { path: '/auth/callback', element: <AuthCallbackPage /> },
   { path: '/register', element: <Navigate to="/login" replace /> },
-  // The public blog: open to everyone, signed in or not.
+  // The public blog and the product page: open to everyone, signed in or not.
   {
     element: <BlogLayout />,
     children: [
       { path: 'blog', element: <BlogHome /> },
       { path: 'blog/:slug', element: <BlogPost /> },
       { path: 'u/:login', element: <AuthorPage /> },
+      { path: 'features', element: <FeaturesPage /> },
     ],
   },
   // Old addresses of the blog.
@@ -93,6 +96,8 @@ const router = createBrowserRouter([
     ],
   },
 ])
+
+registerServiceWorker()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

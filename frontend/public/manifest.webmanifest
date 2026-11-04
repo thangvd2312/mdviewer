@@ -1,0 +1,31 @@
+{
+  "id": "/",
+  "name": "viewmd — Markdown notes with AI",
+  "short_name": "viewmd",
+  "description": "Read Markdown beautifully, pin sticky notes, ask an AI about the page, review with spaced repetition and publish to the blog.",
+  "lang": "en",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "categories": ["education", "productivity"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "New note", "url": "/new", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Review", "url": "/review", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Blog", "url": "/blog", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+  ],
+  "screenshots": [
+    { "src": "/landing/doc-phone.webp", "sizes": "780x1328", "type": "image/webp", "form_factor": "narrow", "label": "Reading a note" },
+    { "src": "/landing/assistant-phone.webp", "sizes": "780x1328", "type": "image/webp", "form_factor": "narrow", "label": "Asking the assistant" },
+    { "src": "/landing/review-phone.webp", "sizes": "780x1328", "type": "image/webp", "form_factor": "narrow", "label": "Review questions" },
+    { "src": "/landing/hero.webp", "sizes": "1920x1200", "type": "image/webp", "form_factor": "wide", "label": "A note with the assistant" },
+    { "src": "/landing/notes.webp", "sizes": "1920x1200", "type": "image/webp", "form_factor": "wide", "label": "Sticky notes" }
+  ]
+}

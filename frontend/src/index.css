@@ -462,7 +462,7 @@ body {
   margin-bottom: 0.55em;
 }
 /* Keep a short code span on one line (it moves to the next line whole); a long one wraps inside its pill. */
-.markdown:is(.question, .asked) :not(pre) > code {
+.markdown:is(.question, .asked, .compact) :not(pre) > code {
   display: inline-block;
   max-width: 100%;
   line-height: 1.35;

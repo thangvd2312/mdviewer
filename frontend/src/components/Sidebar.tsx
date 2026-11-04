@@ -4,6 +4,7 @@ import {
   Brain,
   ChevronRight,
   Compass,
+  Smartphone,
   FileText,
   Globe,
   FolderClosed,
@@ -24,6 +25,7 @@ import { DeleteDocButton, revealOnHover } from './DeleteDocButton'
 import type { DocSummary } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { initials } from '../lib/format'
+import { useInstallApp } from '../lib/pwa'
 import { useDocs, useProjects, useReviewSummary } from '../lib/queries'
 import { useStoredState } from '../lib/storage'
 import { useUI, type ThemePref } from '../lib/ui'
@@ -44,6 +46,7 @@ export function Sidebar() {
   const { data: projects = [] } = useProjects()
   const { data: docs = [] } = useDocs()
   const { data: review } = useReviewSummary()
+  const installApp = useInstallApp()
   const [expanded, setExpanded] = useStoredState<string[]>('viewmd.expanded', [])
   const [creatingProject, setCreatingProject] = useState(false)
   const [connectingAgent, setConnectingAgent] = useState(false)
@@ -111,6 +114,12 @@ export function Sidebar() {
           <Compass className="size-4 text-ink-muted" />
           Blog
         </NavLink>
+        {!installApp.installed && (
+          <NavLink to="/features#app" className={rowClass}>
+            <Smartphone className="size-4 text-ink-muted" />
+            Get the app
+          </NavLink>
+        )}
 
         <Section
           title="Projects"

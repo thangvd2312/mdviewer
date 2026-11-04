@@ -78,6 +78,12 @@ export function LoginPage() {
           >
             Or read the blog — no account needed →
           </Link>
+          <Link
+            to="/features"
+            className="mt-2 inline-flex items-center gap-1.5 text-[13.5px] font-medium text-ink-muted hover:text-ink"
+          >
+            See everything viewmd can do →
+          </Link>
         </div>
       </div>
 

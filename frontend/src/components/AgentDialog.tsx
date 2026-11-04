@@ -9,7 +9,32 @@ import { Button, ConfirmDialog, inputClass, Modal } from './ui'
 
 const TOKENS_KEY = ['tokens'] as const
 
-type Client = 'claude' | 'codex' | 'other'
+export type AgentClient = 'claude' | 'codex' | 'other'
+type Client = AgentClient
+
+/** The one-time setup for each kind of MCP client (also shown on the Features page). */
+export function agentSnippets(
+  url: string,
+  token: string,
+): Record<AgentClient, { label: string; hint: string; code: string }> {
+  return {
+    claude: {
+      label: 'Claude Code',
+      hint: 'Run in a terminal:',
+      code: `claude mcp add --transport http viewmd ${url} --header "Authorization: Bearer ${token}"`,
+    },
+    codex: {
+      label: 'Codex',
+      hint: 'Put the token in your shell profile (e.g. ~/.zshrc), then add the server:',
+      code: `export VIEWMD_TOKEN=${token}\ncodex mcp add viewmd --url ${url} --bearer-token-env-var VIEWMD_TOKEN`,
+    },
+    other: {
+      label: 'Cursor & others',
+      hint: 'Any MCP client with streamable HTTP — e.g. in Cursor’s mcp.json:',
+      code: JSON.stringify({ mcpServers: { viewmd: { url, headers: { Authorization: `Bearer ${token}` } } } }, null, 2),
+    },
+  }
+}
 
 /**
  * Connect an AI agent (Claude Code, Codex, Cursor… — anything that speaks MCP) to the user's notes:
@@ -49,23 +74,7 @@ export function AgentDialog({ open, onClose }: { open: boolean; onClose: () => v
     onClose()
   }
 
-  const snippets: Record<Client, { label: string; hint: string; code: string }> = {
-    claude: {
-      label: 'Claude Code',
-      hint: 'Run in a terminal:',
-      code: `claude mcp add --transport http viewmd ${url} --header "Authorization: Bearer ${token}"`,
-    },
-    codex: {
-      label: 'Codex',
-      hint: 'Put the token in your shell profile (e.g. ~/.zshrc), then add the server:',
-      code: `export VIEWMD_TOKEN=${token}\ncodex mcp add viewmd --url ${url} --bearer-token-env-var VIEWMD_TOKEN`,
-    },
-    other: {
-      label: 'Cursor & others',
-      hint: 'Any MCP client with streamable HTTP — e.g. in Cursor’s mcp.json:',
-      code: JSON.stringify({ mcpServers: { viewmd: { url, headers: { Authorization: `Bearer ${token}` } } } }, null, 2),
-    },
-  }
+  const snippets = agentSnippets(url, token)
 
   return (
     <Modal open={open} onClose={close} title="Connect an AI agent" className="max-w-2xl">
@@ -202,7 +211,7 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
   )
 }
 
-function CodeBox({ code, className, multiline }: { code: string; className?: string; multiline?: boolean }) {
+export function CodeBox({ code, className, multiline }: { code: string; className?: string; multiline?: boolean }) {
   const [copied, setCopied] = useState(false)
   const copy = async () => {
     await navigator.clipboard.writeText(code)

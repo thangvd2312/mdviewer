@@ -45,7 +45,14 @@ function serveFrontend(app: NestExpressApplication, webDist: string, siteUrl: st
     immutable: true,
     maxAge: '1y',
   });
-  app.useStaticAssets(webDist, { index: false, maxAge: '1h' });
+  app.useStaticAssets(webDist, {
+    index: false,
+    maxAge: '1h',
+    // The service worker and the app manifest must update as soon as a new version is deployed.
+    setHeaders: (res, path) => {
+      if (/(?:sw\.js|\.webmanifest)$/.test(path)) res.setHeader('Cache-Control', 'no-cache');
+    },
+  });
   app.use((req: Request, res: Response, next: NextFunction) => {
     if ((req.method !== 'GET' && req.method !== 'HEAD') || req.path.startsWith('/api')) return next();
     res.setHeader('Cache-Control', 'no-cache');
@@ -65,6 +72,16 @@ function serveFrontend(app: NestExpressApplication, webDist: string, siteUrl: st
         description: 'Notes, guides and docs people have shared on viewmd — free to read.',
         url: `${siteUrl}/blog`,
         image,
+        type: 'website',
+      });
+    }
+    if (req.path === '/features' || req.path === '/features/') {
+      return page({
+        title: 'viewmd — Markdown notes you read, remember and share',
+        description:
+          'Read Markdown beautifully, pin sticky notes, ask an AI about the page, review with spaced repetition, publish to the blog — and let AI agents save notes over MCP. Installs like an app on your phone.',
+        url: `${siteUrl}/features`,
+        image: `${siteUrl}/landing/og.jpg`,
         type: 'website',
       });
     }
