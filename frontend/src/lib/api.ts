@@ -4,8 +4,6 @@ export interface User {
   email: string | null
   githubLogin: string | null
   avatarUrl: string | null
-  /** Can open the admin pages (the blog curator). */
-  isAdmin?: boolean
 }
 
 export interface Project {
@@ -96,8 +94,6 @@ export interface PublicAuthor {
   name: string
   login: string | null
   avatarUrl: string | null
-  /** Written by the site's AI editor, not a person. */
-  system?: boolean
 }
 
 /** A published doc as listed on the blog. */
@@ -353,61 +349,6 @@ async function errorFrom(res: Response) {
   return new ApiError(res.status, message ?? res.statusText)
 }
 
-/** The blog curator (admins only). */
-export type CuratedStatus = 'skipped' | 'rejected' | 'approved' | 'failed' | 'draft' | 'published'
-
-export interface CuratorArticle {
-  id: string
-  title: string
-  url: string
-  sourceName: string | null
-  topic: string
-  status: CuratedStatus
-  score: number | null
-  editorScore: number | null
-  reason: string | null
-  editorNotes: string | null
-  upvotes: number
-  comments: number
-  tokens: number
-  model: string | null
-  docId: string | null
-  docTitle: string | null
-  /** Set while the post is public. */
-  slug: string | null
-  updatedAt: string
-}
-
-export interface CuratorRunInfo {
-  id: string
-  trigger: 'auto' | 'manual'
-  status: 'running' | 'done' | 'failed'
-  startedAt: string
-  finishedAt: string | null
-  candidates: number
-  scored: number
-  published: number
-  drafts: number
-  log: string
-}
-
-export interface CuratorStatus {
-  configured: boolean
-  tokenSet: boolean
-  autoRun: boolean
-  running: string | null
-  settings: {
-    topics: string[]
-    dailyPosts: number
-    hour: number
-    timeZone: string
-    minScore: number
-    publishScore: number
-  }
-  runs: CuratorRunInfo[]
-  articles: CuratorArticle[]
-}
-
 async function request<T>(method: string, path: string, body?: unknown, headers?: Record<string, string>): Promise<T> {
   const res = await send(method, path, body, undefined, headers)
   const text = await res.text()
@@ -446,22 +387,6 @@ export const api = {
     update: (id: string, input: DocInput) => request<Doc>('PATCH', `/docs/${id}`, input),
     remove: (id: string) => request<void>('DELETE', `/docs/${id}`),
     setSharing: (id: string, input: SharingInput) => request<Doc>('PUT', `/docs/${id}/sharing`, input),
-  },
-  curator: {
-    status: () => request<CuratorStatus>('GET', '/curator'),
-    preview: (id: string) =>
-      request<{
-        title: string
-        content: string
-        slug: string | null
-        sources: { title: string; url: string }[]
-        editorScore: number | null
-        editorNotes: string | null
-      }>('GET', `/curator/articles/${id}`),
-    run: (count?: number) => request<{ runId: string }>('POST', '/curator/run', { count }),
-    publish: (id: string) => request<{ status: CuratedStatus }>('POST', `/curator/articles/${id}/publish`),
-    unpublish: (id: string) => request<{ status: CuratedStatus }>('POST', `/curator/articles/${id}/unpublish`),
-    rewrite: (id: string) => request<{ runId: string }>('POST', `/curator/articles/${id}/rewrite`),
   },
   review: {
     summary: () => request<ReviewSummary>('GET', '/review'),

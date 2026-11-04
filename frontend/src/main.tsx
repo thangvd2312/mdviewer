@@ -23,7 +23,6 @@ import { NotFound } from './pages/NotFound'
 import { ProjectPage } from './pages/ProjectPage'
 import { ReviewPage } from './pages/ReviewPage'
 import { ReviewSession } from './pages/ReviewSession'
-import { CuratorPage } from './pages/CuratorPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -94,7 +93,6 @@ const router = createBrowserRouter([
       { path: 'p/:id', element: <ProjectPage /> },
       { path: 'review', element: <ReviewPage /> },
       { path: 'review/session', element: <ReviewSession /> },
-      { path: 'admin/curator', element: <CuratorPage /> },
       { path: '*', element: <NotFound /> },
     ],
   },

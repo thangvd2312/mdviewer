@@ -23,9 +23,9 @@ export class Usage {
   @JoinColumn({ name: 'ownerId' })
   owner: Relation<User>;
 
-  /** chat = a question answered; suggest = suggested questions generated; curate = a blog post the system wrote. */
+  /** chat = a question answered; suggest = suggested questions generated. */
   @Column({ type: 'varchar', length: 16 })
-  kind: 'chat' | 'suggest' | 'curate';
+  kind: 'chat' | 'suggest';
 
   @Column({ type: 'varchar', length: 16 })
   tier: Tier;

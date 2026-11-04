@@ -79,19 +79,6 @@ jobs:
           upsert ASSISTANT_UNLIMITED_USERS "$ASSISTANT_UNLIMITED_USERS"
           echo "assistant config written to .env"
 
-      # The blog curator's daily.dev token, also from a repo secret. Without it the curator stays idle.
-      - name: Curator config from repo secrets
-        env:
-          DAILYDEV_TOKEN: ${{ secrets.DAILYDEV_TOKEN }}
-        run: |
-          if [ -z "$DAILYDEV_TOKEN" ]; then echo "DAILYDEV_TOKEN secret not set; leaving .env as is"; exit 0; fi
-          f="$APP_DIR/.env"
-          touch "$f"
-          grep -v "^DAILYDEV_TOKEN=" "$f" > "$f.tmp" || true
-          printf '%s=%s\n' DAILYDEV_TOKEN "$DAILYDEV_TOKEN" >> "$f.tmp"
-          cat "$f.tmp" > "$f" && rm "$f.tmp"
-          echo "curator config written to .env"
-
       - name: Reload app (pm2) — migrations run on startup
         working-directory: ${{ env.APP_DIR }}
         run: |

@@ -4,7 +4,6 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AnnotationsModule } from './annotations/annotations.module';
 import { AssistantModule } from './assistant/assistant.module';
 import { AuthModule } from './auth/auth.module';
-import { CuratorModule } from './curator/curator.module';
 import { DocsModule } from './docs/docs.module';
 import { HealthController } from './health/health.controller';
 import { ProjectsModule } from './projects/projects.module';
@@ -40,7 +39,6 @@ import { ReviewModule } from './review/review.module';
     PublicModule,
     McpModule,
     ReviewModule,
-    CuratorModule,
   ],
   controllers: [HealthController],
 })

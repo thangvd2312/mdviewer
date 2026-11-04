@@ -10,7 +10,7 @@ import { ProjectsService } from '../projects/projects.service';
 import { AssistantContextDto, ChatDto } from './assistant.dto';
 import type { Message, MessageStatus } from './conversation.entity';
 import { ConversationsService } from './conversations.service';
-import { QuotaService, type Plan } from './quota.service';
+import { QuotaService } from './quota.service';
 import type { Tier } from './usage.entity';
 
 /** Documents longer than this are sent as their outline plus the section being read. */
@@ -355,66 +355,6 @@ Reply with only a JSON object, no code fence: {"questions": ["…", "…", "…"
       await this.quota.settle(record, tokens, model);
       release();
     }
-  }
-
-  /**
-   * A completion for a system job (the blog curator): nobody's allowance is used, but the tokens are
-   * recorded under `ownerId` so they count towards the shared daily budget. Each model in `chain` is
-   * tried in turn.
-   */
-  async completeSystem(
-    ownerId: string,
-    messages: ChatCompletionMessageParam[],
-    chain: Plan[],
-    timeoutMs = 900_000,
-  ): Promise<{ text: string; model: string; tokens: number }> {
-    const client = this.requireClient();
-    for (const attempt of chain) {
-      try {
-        // Streamed: long answers take minutes, and the gateway cuts off requests that stay silent that long.
-        const stream = await client.chat.completions.create(
-          {
-            model: attempt.model,
-            stream: true,
-            stream_options: { include_usage: true },
-            reasoning_effort: attempt.effort,
-            messages,
-          },
-          { maxRetries: 1, signal: AbortSignal.timeout(timeoutMs) },
-        );
-        let raw = '';
-        const usage = { prompt: 0, completion: 0 };
-        for await (const chunk of stream) {
-          if (chunk.usage) {
-            usage.prompt = chunk.usage.prompt_tokens;
-            usage.completion = chunk.usage.completion_tokens;
-          }
-          raw += chunk.choices[0]?.delta?.content ?? '';
-        }
-        if (!usage.completion) usage.completion = Math.ceil(raw.length / 3);
-        await this.quota.recordSystem(ownerId, attempt, usage);
-        const text = stripThink(raw);
-        if (text.trim()) return { text, model: attempt.model, tokens: usage.prompt + usage.completion };
-        this.logger.warn(`system completion with ${attempt.model} came back empty`);
-      } catch (error) {
-        this.logger.warn(`system completion with ${attempt.model} failed: ${describe(error)}`);
-      }
-    }
-    throw new ServiceUnavailableException('The AI service is busy right now — try again in a moment.');
-  }
-
-  /** The models system jobs may use: the main one (with fallbacks) and the cheap one. */
-  systemChains() {
-    return this.quota.systemChains();
-  }
-
-  /** Share of today's shared token budget already used (0–1). */
-  globalShare() {
-    return this.quota.globalShare();
-  }
-
-  get enabled() {
-    return this.client !== null;
   }
 
   private requireClient() {

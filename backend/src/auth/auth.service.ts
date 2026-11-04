@@ -1,10 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/user.entity';
-import { adminSet, isAdmin } from './admins';
 import { GithubProfile } from './github-oauth.service';
 
 export interface PublicUser {
@@ -13,32 +11,22 @@ export interface PublicUser {
   email: string | null;
   githubLogin: string | null;
   avatarUrl: string | null;
-  /** Can use the admin pages (e.g. the blog curator). */
-  isAdmin: boolean;
 }
+
+const toPublic = (u: User): PublicUser => ({
+  id: u.id,
+  name: u.name,
+  email: u.email,
+  githubLogin: u.githubLogin,
+  avatarUrl: u.avatarUrl,
+});
 
 @Injectable()
 export class AuthService {
-  private readonly admins: Set<string>;
-
   constructor(
     @InjectRepository(User) private readonly users: Repository<User>,
     private readonly jwt: JwtService,
-    config: ConfigService,
-  ) {
-    this.admins = adminSet(config);
-  }
-
-  private toPublic(u: User): PublicUser {
-    return {
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      githubLogin: u.githubLogin,
-      avatarUrl: u.avatarUrl,
-      isAdmin: isAdmin(this.admins, u),
-    };
-  }
+  ) {}
 
   /** Finds or creates the user for a GitHub profile and issues an access token. */
   async loginWithGithub(profile: GithubProfile) {
@@ -61,12 +49,12 @@ export class AuthService {
     user = await this.users.save(user);
 
     const accessToken = await this.jwt.signAsync({ sub: user.id });
-    return { accessToken, user: this.toPublic(user) };
+    return { accessToken, user: toPublic(user) };
   }
 
   async me(userId: string): Promise<PublicUser> {
     const user = await this.users.findOneBy({ id: userId });
     if (!user) throw new NotFoundException();
-    return this.toPublic(user);
+    return toPublic(user);
   }
 }
