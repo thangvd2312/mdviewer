@@ -75,12 +75,13 @@ function serveFrontend(app: NestExpressApplication, webDist: string, siteUrl: st
         type: 'website',
       });
     }
-    if (req.path === '/features' || req.path === '/features/') {
+    // `/` sends visitors who aren't signed in to the product page, so it shares its preview.
+    if (req.path === '/' || req.path === '/features' || req.path === '/features/') {
       return page({
         title: 'viewmd — Markdown notes you read, remember and share',
         description:
           'Read Markdown beautifully, pin sticky notes, ask an AI about the page, review with spaced repetition, publish to the blog — and let AI agents save notes over MCP. Installs like an app on your phone.',
-        url: `${siteUrl}/features`,
+        url: req.path === '/' ? `${siteUrl}/` : `${siteUrl}/features`,
         image: `${siteUrl}/landing/og.jpg`,
         type: 'website',
       });

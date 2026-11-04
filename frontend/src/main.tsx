@@ -44,8 +44,8 @@ function RequireAuth({ children }: { children: ReactNode }) {
       </div>
     )
   }
-  // Visitors who aren't signed in land on the public blog; other app pages ask them to sign in.
-  if (!user && location.pathname === '/') return <Navigate to="/blog" replace />
+  // Visitors who aren't signed in land on the product page first; other app pages ask them to sign in.
+  if (!user && location.pathname === '/') return <Navigate to="/features" replace />
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
   return children
 }

@@ -43,16 +43,20 @@ function BlogHeader() {
   return (
     <header className="z-20 shrink-0 border-b border-line bg-surface/90 backdrop-blur supports-[backdrop-filter]:bg-surface/75">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4 sm:px-8">
-        <Link to="/blog" className="flex shrink-0 items-center gap-2" aria-label="viewmd Blog — home">
+        <Link
+          to={user ? '/blog' : '/features'}
+          className="flex shrink-0 items-center gap-2"
+          aria-label={user ? 'viewmd Blog — home' : 'viewmd — home'}
+        >
           <Logo className="size-7" />
           <span className="text-[16px] font-semibold tracking-tight max-[360px]:hidden">viewmd</span>
         </Link>
         <nav className="ml-2 flex items-center gap-0.5 sm:ml-4" aria-label="Site">
-          <HeaderTab to="/blog" active={!location.pathname.startsWith('/features')}>
-            Blog
-          </HeaderTab>
           <HeaderTab to="/features" active={location.pathname.startsWith('/features')}>
             Features
+          </HeaderTab>
+          <HeaderTab to="/blog" active={!location.pathname.startsWith('/features')}>
+            Blog
           </HeaderTab>
         </nav>
         <div className="ml-auto flex items-center gap-1">
