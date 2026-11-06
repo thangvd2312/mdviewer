@@ -1,4 +1,5 @@
 import { All, Controller, Req, Res } from '@nestjs/common';
+import { ApiExcludeController } from '@nestjs/swagger';
 import type { AuthInfo } from '@modelcontextprotocol/server';
 import type { Request, Response } from 'express';
 import { WriteLimiter } from '../public/write-limits';
@@ -9,6 +10,7 @@ import { McpService } from './mcp.service';
  * MCP over streamable HTTP: POST /api/mcp with `Authorization: Bearer <viewmd token>`.
  * The token is checked here; the MCP handler only ever runs for a verified caller.
  */
+@ApiExcludeController() // JSON-RPC (MCP), described in the API overview instead
 @Controller('mcp')
 export class McpController {
   /** All MCP requests per token (reads included): a looping agent can't hammer the database. */

@@ -1,3 +1,4 @@
+import { ApiHideProperty } from '@nestjs/swagger';
 import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Relation } from 'typeorm';
 import { User } from '../users/user.entity';
 
@@ -14,6 +15,8 @@ export class ApiToken {
   @Column({ length: 36 })
   ownerId: string;
 
+  @ApiHideProperty()
+
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'ownerId' })
   owner: Relation<User>;
@@ -23,6 +26,7 @@ export class ApiToken {
   name: string;
 
   @Index({ unique: true })
+  @ApiHideProperty()
   @Column({ type: 'char', length: 64, select: false })
   tokenHash: string;
 

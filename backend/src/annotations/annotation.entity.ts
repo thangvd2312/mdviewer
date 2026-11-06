@@ -1,3 +1,4 @@
+import { ApiHideProperty } from '@nestjs/swagger';
 import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Relation } from 'typeorm';
 import { Doc } from '../docs/doc.entity';
 import { User } from '../users/user.entity';
@@ -21,12 +22,16 @@ export class Annotation {
   @Column({ length: 36 })
   ownerId: string;
 
+  @ApiHideProperty()
+
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'ownerId' })
   owner: Relation<User>;
 
   @Column({ length: 36 })
   docId: string;
+
+  @ApiHideProperty()
 
   @ManyToOne(() => Doc, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'docId' })

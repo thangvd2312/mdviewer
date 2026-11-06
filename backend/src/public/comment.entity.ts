@@ -1,3 +1,4 @@
+import { ApiHideProperty } from '@nestjs/swagger';
 import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Relation, Unique } from 'typeorm';
 import { Doc } from '../docs/doc.entity';
 import { User } from '../users/user.entity';
@@ -21,6 +22,8 @@ export class Comment {
   @Column({ length: 36 })
   docId: string;
 
+  @ApiHideProperty()
+
   @ManyToOne(() => Doc, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'docId' })
   doc: Relation<Doc>;
@@ -29,6 +32,8 @@ export class Comment {
   @Column({ type: 'varchar', length: 36, nullable: true })
   parentId: string | null;
 
+  @ApiHideProperty()
+
   @ManyToOne(() => Comment, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'parentId' })
   parent: Relation<Comment> | null;
@@ -36,6 +41,8 @@ export class Comment {
   /** null = guest (or an account that was deleted since). */
   @Column({ type: 'varchar', length: 36, nullable: true })
   authorId: string | null;
+
+  @ApiHideProperty()
 
   @ManyToOne(() => User, { onDelete: 'SET NULL' })
   @JoinColumn({ name: 'authorId' })
@@ -46,6 +53,7 @@ export class Comment {
   guestName: string | null;
 
   /** Guests only: SHA-256 of the secret their browser keeps to edit or delete this comment. */
+  @ApiHideProperty()
   @Column({ type: 'char', length: 64, nullable: true, select: false })
   guestTokenHash: string | null;
 
@@ -89,12 +97,16 @@ export class CommentBlock {
   @Column({ length: 36 })
   ownerId: string;
 
+  @ApiHideProperty()
+
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'ownerId' })
   owner: Relation<User>;
 
   @Column({ type: 'varchar', length: 36, nullable: true })
   userId: string | null;
+
+  @ApiHideProperty()
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })

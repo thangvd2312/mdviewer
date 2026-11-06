@@ -1,3 +1,4 @@
+import { ApiHideProperty } from '@nestjs/swagger';
 import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, Relation } from 'typeorm';
 import { Doc } from '../docs/doc.entity';
 import { Project } from '../projects/project.entity';
@@ -18,6 +19,8 @@ export class Conversation {
   @Column({ length: 36 })
   ownerId: string;
 
+  @ApiHideProperty()
+
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'ownerId' })
   owner: Relation<User>;
@@ -30,12 +33,16 @@ export class Conversation {
   @Column({ type: 'varchar', length: 36, nullable: true })
   docId: string | null;
 
+  @ApiHideProperty()
+
   @ManyToOne(() => Doc, { onDelete: 'SET NULL' })
   @JoinColumn({ name: 'docId' })
   doc: Relation<Doc> | null;
 
   @Column({ type: 'varchar', length: 36, nullable: true })
   projectId: string | null;
+
+  @ApiHideProperty()
 
   @ManyToOne(() => Project, { onDelete: 'SET NULL' })
   @JoinColumn({ name: 'projectId' })
@@ -67,6 +74,8 @@ export class Message {
   @Column({ length: 36 })
   conversationId: string;
 
+  @ApiHideProperty()
+
   @ManyToOne(() => Conversation, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'conversationId' })
   conversation: Relation<Conversation>;
@@ -74,6 +83,8 @@ export class Message {
   /** Denormalised so a user's questions can be queried without joining conversations. */
   @Column({ length: 36 })
   ownerId: string;
+
+  @ApiHideProperty()
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'ownerId' })

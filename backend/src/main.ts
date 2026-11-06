@@ -5,6 +5,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import type { NextFunction, Request, Response } from 'express';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { API_DOCS_PATH, setupApiDocs } from './api-docs';
 import { AppModule } from './app.module';
 import { allowedOrigins } from './origins';
 import { PublicDocsService } from './public/public-docs.service';
@@ -19,6 +20,7 @@ async function bootstrap() {
   app.useBodyParser('json', { limit: '5mb' });
   app.enableCors({ origin: [...allowedOrigins(config)] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  setupApiDocs(app);
   serveFrontend(
     app,
     config.get('WEB_DIST', join(__dirname, '../../frontend/dist')),
@@ -30,6 +32,8 @@ async function bootstrap() {
   await app.listen(port, host);
   console.log(`viewmd api listening on http://${host}:${port}/api`);
 }
+
+const isApiDocs = (path: string) => path === `/${API_DOCS_PATH}` || path.startsWith(`/${API_DOCS_PATH}/`);
 
 /** In production one process serves both the API and the built React app (with SPA fallback). */
 function serveFrontend(app: NestExpressApplication, webDist: string, siteUrl: string) {
@@ -53,7 +57,9 @@ function serveFrontend(app: NestExpressApplication, webDist: string, siteUrl: st
     },
   });
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if ((req.method !== 'GET' && req.method !== 'HEAD') || req.path.startsWith('/api')) return next();
+    if ((req.method !== 'GET' && req.method !== 'HEAD') || req.path.startsWith('/api') || isApiDocs(req.path)) {
+      return next();
+    }
     res.setHeader('Cache-Control', 'no-cache');
     const query = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
     // Old addresses of the blog keep working (and pass their ranking on to the new ones).

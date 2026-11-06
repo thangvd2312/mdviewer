@@ -15,6 +15,7 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiHeader, ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import type { AuthUser } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -32,12 +33,25 @@ import {
   UpdateCommentDto,
 } from './public.dto';
 import { PublicDocsService } from './public-docs.service';
+import {
+  AuthorProfileDto,
+  BlocksPageDto,
+  CommentDto,
+  CommentPageDto,
+  CreatedCommentDto,
+  ExplorePageDto,
+  PublicDocDto,
+  RepliesPageDto,
+  TopicDto,
+} from './public.responses.dto';
 import { SameSiteWriteGuard } from './same-site-write.guard';
 
 /**
  * Public pages: anyone can read published documents and comment (signed in or as a guest).
  * A token is optional; when present the reader is recognised (their own comments, moderation).
  */
+@ApiTags('public')
+@ApiBearerAuth()
 @Controller('public')
 @UseGuards(OptionalAuthGuard, SameSiteWriteGuard)
 export class PublicController {
@@ -48,25 +62,30 @@ export class PublicController {
 
   /** Explore: published documents, newest or most read first. */
   @Get('docs')
-  list(@Query() query: ExploreQuery) {
+  list(@Query() query: ExploreQuery): Promise<ExplorePageDto> {
     return this.docs.list(query);
   }
 
   /** An author's profile (their docs: `GET /public/docs?author=<login>`). */
   @Get('authors/:login')
-  author(@Param('login') login: string) {
+  author(@Param('login') login: string): Promise<AuthorProfileDto> {
     if (!/^[A-Za-z0-9-]{1,100}$/.test(login)) throw new NotFoundException('There’s no author with that name.');
     return this.docs.author(login);
   }
 
   /** The most used topics across published docs. */
   @Get('topics')
-  topics() {
+  topics(): Promise<TopicDto[]> {
     return this.docs.topics();
   }
 
+  /** The reading page: a published document and its author. Counts a view (once per reader per few hours). */
   @Get('docs/:slug')
-  read(@Param() { slug }: SlugParam, @CurrentUser() user: AuthUser | undefined, @Req() req: Request) {
+  read(
+    @Param() { slug }: SlugParam,
+    @CurrentUser() user: AuthUser | undefined,
+    @Req() req: Request,
+  ): Promise<PublicDocDto> {
     const client = clientInfo(req);
     return this.docs.read(slug, {
       userId: user?.id,
@@ -77,7 +96,11 @@ export class PublicController {
 
   /** Top-level threads, newest first, 20 at a time (pass `before=<nextCursor>` for more). */
   @Get('docs/:slug/comments')
-  listComments(@Param() { slug }: SlugParam, @Query() q: CommentsQuery, @CurrentUser() user: AuthUser | undefined) {
+  listComments(
+    @Param() { slug }: SlugParam,
+    @Query() q: CommentsQuery,
+    @CurrentUser() user: AuthUser | undefined,
+  ): Promise<CommentPageDto> {
     return this.comments.list(slug, user?.id, q.before);
   }
 
@@ -87,7 +110,7 @@ export class PublicController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query() q: RepliesQuery,
     @CurrentUser() user: AuthUser | undefined,
-  ) {
+  ): Promise<RepliesPageDto> {
     return this.comments.replies(id, user?.id, q.after);
   }
 
@@ -98,24 +121,34 @@ export class PublicController {
     @Body() dto: CreateCommentDto,
     @CurrentUser() user: AuthUser | undefined,
     @Req() req: Request,
-  ) {
+  ): Promise<CreatedCommentDto> {
     return this.comments.create(slug, dto, actor(req, user));
   }
 
   /** Author only; guests send their secret in the X-Guest-Token header. */
   @Patch('comments/:id')
+  @ApiHeader({
+    name: 'X-Guest-Token',
+    required: false,
+    description: 'Guests: the `guestToken` returned when the comment was posted.',
+  })
   updateComment(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateCommentDto,
     @CurrentUser() user: AuthUser | undefined,
     @Req() req: Request,
-  ) {
+  ): Promise<CommentDto> {
     return this.comments.update(id, dto, actor(req, user));
   }
 
   /** The comment's author (guests: X-Guest-Token) or the page's author. */
   @Delete('comments/:id')
   @HttpCode(204)
+  @ApiHeader({
+    name: 'X-Guest-Token',
+    required: false,
+    description: 'Guests: the `guestToken` returned when the comment was posted.',
+  })
   removeComment(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: AuthUser | undefined,
@@ -138,6 +171,7 @@ export class PublicController {
     return this.comments.block(id, signedIn(user));
   }
 
+  /** Page author: let this comment's writer comment again. */
   @Delete('comments/:id/block')
   @HttpCode(204)
   unblock(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthUser | undefined) {
@@ -146,10 +180,11 @@ export class PublicController {
 
   /** The signed-in author's blocked commenters (names and devices only). */
   @Get('blocks')
-  listBlocks(@Query() q: BlocksQuery, @CurrentUser() user: AuthUser | undefined) {
+  listBlocks(@Query() q: BlocksQuery, @CurrentUser() user: AuthUser | undefined): Promise<BlocksPageDto> {
     return this.comments.listBlocks(signedIn(user), q.offset, q.limit);
   }
 
+  /** Unblock a commenter from the blocked list. */
   @Delete('blocks/:id')
   @HttpCode(204)
   removeBlock(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthUser | undefined) {

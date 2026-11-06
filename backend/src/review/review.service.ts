@@ -397,7 +397,7 @@ Is the learner's answer correct? Judge the meaning, not the wording. Reply with 
     const json = text.match(/\{[\s\S]*\}/)?.[0];
     try {
       const v = JSON.parse(json ?? '') as { verdict?: unknown; feedback?: unknown };
-      const verdict =
+      const verdict: 'correct' | 'partial' | 'wrong' =
         v.verdict === 'correct' || v.verdict === 'partial' || v.verdict === 'wrong' ? v.verdict : 'partial';
       return { verdict, feedback: typeof v.feedback === 'string' ? clip(v.feedback, 1000) : '' };
     } catch {

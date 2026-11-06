@@ -1,4 +1,6 @@
 import { Controller, Get, Logger, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiExcludeEndpoint, ApiFoundResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { UserDto } from './auth.responses.dto';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { Request, Response } from 'express';
@@ -15,6 +17,7 @@ const STATE_COOKIE_PATH = '/api/auth/github';
 
 type LoginError = 'github_not_configured' | 'access_denied' | 'invalid_state' | 'github_failed';
 
+@ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
@@ -39,6 +42,12 @@ export class AuthController {
    * `return_to` (an allowed origin, e.g. http://localhost:5173) gets the token instead of the site.
    */
   @Get('github')
+  @ApiQuery({
+    name: 'return_to',
+    required: false,
+    description: 'Origin to receive the token, e.g. http://localhost:5173 (must be in ALLOWED_ORIGINS).',
+  })
+  @ApiFoundResponse({ description: 'Redirect to GitHub (or first to the host GitHub returns to).' })
   startGithub(@Query('return_to') returnTo: string | undefined, @Req() req: Request, @Res() res: Response) {
     if (!this.github.configured) return this.fail(res, 'github_not_configured');
     // Started on another host of this server (the API domain): continue on the callback's host.
@@ -63,6 +72,7 @@ export class AuthController {
 
   /** Step 2: GitHub redirects back here; hand our JWT to the frontend in the URL fragment. */
   @Get('github/callback')
+  @ApiExcludeEndpoint() // only GitHub calls it
   async githubCallback(
     @Query('code') code: string | undefined,
     @Query('state') state: string | undefined,
@@ -89,9 +99,11 @@ export class AuthController {
     }
   }
 
+  /** The signed-in user. */
   @Get('me')
+  @ApiBearerAuth()
   @UseGuards(AuthGuard)
-  me(@CurrentUser() user: AuthUser) {
+  me(@CurrentUser() user: AuthUser): Promise<UserDto> {
     return this.auth.me(user.id);
   }
 

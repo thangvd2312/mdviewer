@@ -137,6 +137,8 @@ viewmd có sẵn một MCP server (streamable HTTP) tại `https://<site>/api/mc
 
 ## API
 
+**Tài liệu tương tác (Swagger):** `/docs` — local http://localhost:9000/docs, production https://apimdviewer.thangvu.io.vn/docs (spec OpenAPI ở `/docs/json`). Bấm **Authorize** và dán token (`localStorage.getItem('viewmd.token')` trong console của app) để gọi thử. Schema request/response được plugin `@nestjs/swagger` sinh từ DTO, entity và JSDoc lúc build (`nest-cli.json`); response trả object thường thì khai báo class trong `*.responses.dto.ts` và ghi kiểu trả về cho method của controller (tsc kiểm tra class khớp với dữ liệu thật).
+
 Tất cả route (trừ `auth/github*`) cần header `Authorization: Bearer <token>`. Mỗi người dùng chỉ thấy được dữ liệu của chính mình.
 
 | Method | Path | Ghi chú |

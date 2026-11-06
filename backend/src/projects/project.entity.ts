@@ -1,3 +1,4 @@
+import { ApiHideProperty } from '@nestjs/swagger';
 import {
   Column,
   CreateDateColumn,
@@ -22,6 +23,8 @@ export class Project {
   @Column({ length: 36 })
   ownerId: string;
 
+  @ApiHideProperty()
+
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'ownerId' })
   owner: Relation<User>;
@@ -34,6 +37,8 @@ export class Project {
 
   @Column({ length: 16, default: '📁' })
   icon: string;
+
+  @ApiHideProperty()
 
   @OneToMany(() => Doc, (doc) => doc.project)
   docs: Relation<Doc[]>;
