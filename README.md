@@ -182,10 +182,11 @@ Nội dung tối đa khoảng 2 triệu ký tự (body JSON giới hạn 5 MB).
 
 ## Deploy (production)
 
-Production chạy tại **https://mdviewer.thangvu.io.vn**:
+Production chạy tại **https://mdviewer.thangvu.io.vn**. API còn có domain riêng **https://apimdviewer.thangvu.io.vn** (cùng một app) để chạy frontend ở máy với dữ liệu thật:
 
 ```
 Cloudflare (HTTPS) ── cloudflared tunnel ──► 127.0.0.1:4100  pm2 "mdviewer" (NestJS: /api + React build)
+  mdviewer.thangvu.io.vn, apimdviewer.thangvu.io.vn
                                                     │
                                                     └──► 127.0.0.1:3307  MySQL (container kiwi-mysql, database mdviewer)
 ```
@@ -198,3 +199,4 @@ Cloudflare (HTTPS) ── cloudflared tunnel ──► 127.0.0.1:4100  pm2 "mdvi
   cd backend && DB_NAME=<db trống hoặc khớp schema hiện tại> npm run migration:generate -- src/migrations/<TenMigration>
   ```
 - **Xem log / khởi động lại**: `pm2 logs mdviewer`, `pm2 restart mdviewer`.
+- **Frontend ở máy + API production**: `cd frontend && npm run dev:prod` (gọi thẳng `https://apimdviewer.thangvu.io.vn`), mở http://localhost:5173 và đăng nhập GitHub như bình thường — token tự quay về localhost. Cần `ALLOWED_ORIGINS=http://localhost:5173` trong `.env` trên server (CORS, và là nơi duy nhất ngoài site được nhận token đăng nhập). Đây là dữ liệu thật: sửa/xoá ở máy là sửa/xoá trên production.

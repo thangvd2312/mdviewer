@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
+import { allowedOrigins } from '../origins';
 
 /**
  * Public writes must come from our own pages. Guests have no credentials, so without this another
@@ -24,11 +25,7 @@ export class SameSiteWriteGuard implements CanActivate {
   private readonly allowLocalhost: boolean;
 
   constructor(config: ConfigService) {
-    const origins = [
-      config.get<string>('FRONTEND_URL', 'http://localhost:5173'),
-      ...(config.get<string>('ALLOWED_ORIGINS') ?? '').split(','),
-    ];
-    this.allowed = new Set(origins.map((o) => o.trim().replace(/\/$/, '')).filter(Boolean));
+    this.allowed = allowedOrigins(config);
     // Development: Vite may run on any localhost port.
     this.allowLocalhost = config.get('NODE_ENV') !== 'production';
   }

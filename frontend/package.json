@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:prod": "VITE_API_URL=https://apimdviewer.thangvu.io.vn vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"

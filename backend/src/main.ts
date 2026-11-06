@@ -6,6 +6,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { AppModule } from './app.module';
+import { allowedOrigins } from './origins';
 import { PublicDocsService } from './public/public-docs.service';
 import { SLUG_PATTERN } from './public/public.dto';
 
@@ -16,9 +17,7 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
   // Markdown documents can be large; the default 100kb JSON limit is too small.
   app.useBodyParser('json', { limit: '5mb' });
-  app.enableCors({
-    origin: config.get('FRONTEND_URL', 'http://localhost:5173'),
-  });
+  app.enableCors({ origin: [...allowedOrigins(config)] });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   serveFrontend(
     app,

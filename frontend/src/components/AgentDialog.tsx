@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { Bot, Check, Copy, KeyRound, Trash2, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
-import { api, ApiError, type ApiTokenInfo } from '../lib/api'
+import { api, API_ORIGIN, ApiError, type ApiTokenInfo } from '../lib/api'
 import { timeAgo } from '../lib/format'
 import { useUI } from '../lib/ui'
 import { Button, ConfirmDialog, inputClass, Modal } from './ui'
@@ -48,7 +48,7 @@ export function AgentDialog({ open, onClose }: { open: boolean; onClose: () => v
   const [created, setCreated] = useState<string | null>(null)
   const [client, setClient] = useState<Client>('claude')
   const [revoking, setRevoking] = useState<ApiTokenInfo | null>(null)
-  const url = `${window.location.origin}/api/mcp`
+  const url = `${API_ORIGIN || window.location.origin}/api/mcp`
   const token = created ?? '<your token>'
 
   const create = useMutation({

@@ -303,6 +303,12 @@ export type ChatStreamEvent =
   | { type: 'done'; stopReason: string | null }
   | { type: 'error'; message: string }
 
+/**
+ * Where the API lives. Empty (production): the same site, `/api`. Set VITE_API_URL to call another one,
+ * e.g. `npm run dev:prod` runs the local app against https://apimdviewer.thangvu.io.vn.
+ */
+export const API_ORIGIN = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
+
 const TOKEN_KEY = 'viewmd.token'
 export const UNAUTHORIZED_EVENT = 'viewmd:unauthorized'
 
@@ -329,7 +335,7 @@ async function send(
   headers?: Record<string, string>,
 ) {
   const token = tokenStore.get()
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${API_ORIGIN}/api${path}`, {
     method,
     headers: {
       ...(body !== undefined && { 'Content-Type': 'application/json' }),
@@ -369,8 +375,10 @@ const qs = (params: Record<string, string | number | undefined>) => {
 
 export const api = {
   auth: {
-    /** Full-page navigation target that starts the GitHub OAuth flow. */
-    githubUrl: '/api/auth/github',
+    /** Full-page navigation target that starts the GitHub OAuth flow (and brings the token back here). */
+    githubUrl: API_ORIGIN
+      ? `${API_ORIGIN}/api/auth/github?return_to=${encodeURIComponent(window.location.origin)}`
+      : '/api/auth/github',
     me: () => request<User>('GET', '/auth/me'),
   },
   projects: {
