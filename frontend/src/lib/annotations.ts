@@ -40,8 +40,14 @@ export interface TextIndex {
 }
 
 export function buildTextIndex(root: HTMLElement): TextIndex {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode: (n) => (n.parentElement?.closest(SKIP) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+  // Elements are visited too, so a skipped one drops its whole subtree at once (no per-text-node closest()).
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) =>
+      n.nodeType === Node.TEXT_NODE
+        ? NodeFilter.FILTER_ACCEPT
+        : (n as Element).matches(SKIP)
+          ? NodeFilter.FILTER_REJECT
+          : NodeFilter.FILTER_SKIP,
   })
   const nodes: Text[] = []
   const starts: number[] = []

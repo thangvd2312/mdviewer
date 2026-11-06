@@ -5,14 +5,22 @@ export const MOBILE_QUERY = '(max-width: 639px)'
 /** Touch screen without hover (phones, tablets). */
 export const TOUCH_QUERY = '(hover: none) and (pointer: coarse)'
 
+// One MediaQueryList per query: React reads the snapshot on every render.
+const mediaLists = new Map<string, MediaQueryList>()
+const mediaList = (query: string) => {
+  let m = mediaLists.get(query)
+  if (!m) mediaLists.set(query, (m = matchMedia(query)))
+  return m
+}
+
 export function useMediaQuery(query: string) {
   return useSyncExternalStore(
     (onChange) => {
-      const m = matchMedia(query)
+      const m = mediaList(query)
       m.addEventListener('change', onChange)
       return () => m.removeEventListener('change', onChange)
     },
-    () => matchMedia(query).matches,
+    () => mediaList(query).matches,
   )
 }
 
@@ -30,25 +38,43 @@ export interface VisibleArea {
   bottomInset: number
 }
 
-let snapshot: VisibleArea = { height: 0, bottomInset: 0 }
-const read = (): VisibleArea => {
+// Measured only when the viewport changes, never while rendering: reading innerHeight / visualViewport
+// right after React changed the DOM forces a full layout of the page (very slow on long documents).
+let snapshot: VisibleArea | null = null
+const listeners = new Set<() => void>()
+const measure = (): VisibleArea => {
   const vv = window.visualViewport
   const height = Math.round(vv?.height ?? window.innerHeight)
   const bottomInset = vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0
-  if (height !== snapshot.height || bottomInset !== snapshot.bottomInset) snapshot = { height, bottomInset }
-  return snapshot
+  return snapshot && height === snapshot.height && bottomInset === snapshot.bottomInset
+    ? snapshot
+    : { height, bottomInset }
+}
+const update = () => {
+  const next = measure()
+  if (next === snapshot) return
+  snapshot = next
+  listeners.forEach((l) => l())
+}
+const getSnapshot = () => (snapshot ??= measure())
+
+function subscribe(onChange: () => void) {
+  if (listeners.size === 0) {
+    window.visualViewport?.addEventListener('resize', update)
+    window.visualViewport?.addEventListener('scroll', update)
+    window.addEventListener('resize', update)
+    update() // it may have changed while nobody was listening
+  }
+  listeners.add(onChange)
+  return () => {
+    listeners.delete(onChange)
+    if (listeners.size > 0) return
+    window.visualViewport?.removeEventListener('resize', update)
+    window.visualViewport?.removeEventListener('scroll', update)
+    window.removeEventListener('resize', update)
+  }
 }
 
 export function useVisibleArea() {
-  return useSyncExternalStore((onChange) => {
-    const vv = window.visualViewport
-    vv?.addEventListener('resize', onChange)
-    vv?.addEventListener('scroll', onChange)
-    window.addEventListener('resize', onChange)
-    return () => {
-      vv?.removeEventListener('resize', onChange)
-      vv?.removeEventListener('scroll', onChange)
-      window.removeEventListener('resize', onChange)
-    }
-  }, read)
+  return useSyncExternalStore(subscribe, getSnapshot)
 }

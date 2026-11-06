@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import type { Element } from 'hast'
 import { toString } from 'hast-util-to-string'
 import { Check, CodeXml, Copy, TriangleAlert, WrapText } from 'lucide-react'
-import { memo, useEffect, useId, useState, type ComponentPropsWithoutRef, type ReactNode } from 'react'
+import { memo, useEffect, useMemo, useState, type ComponentPropsWithoutRef, type ReactNode } from 'react'
 import Markdown, { type Components } from 'react-markdown'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeSlug from 'rehype-slug'
@@ -105,32 +105,67 @@ export function CodeBlock({ lang, text, children }: { lang?: string; text: strin
   )
 }
 
-function Mermaid({ code }: { code: string }) {
-  const { resolvedTheme } = useUI()
-  const id = 'mmd' + useId().replace(/[^a-zA-Z0-9]/g, '')
-  const [state, setState] = useState<{ svg?: string; error?: string }>({})
+type MermaidResult = { svg?: string; error?: string }
 
-  useEffect(() => {
-    let cancelled = false
-    import('mermaid').then(async ({ default: mermaid }) => {
+// Rendering a diagram blocks the page for tens to hundreds of ms. So diagrams are rendered one at a
+// time with a pause in between (clicks get through), skipped once their document is gone (switching
+// docs quickly doesn't pile up work), and remembered (going back to a doc shows them at once).
+const mermaidCache = new Map<string, MermaidResult>()
+const MERMAID_CACHE_MAX = 200
+let mermaidQueue: Promise<unknown> = Promise.resolve()
+let mermaidTheme: string | undefined
+let mermaidSeq = 0
+
+function renderMermaid(code: string, theme: 'dark' | 'neutral', isCancelled: () => boolean) {
+  const key = `${theme}\n${code}`
+  const job = mermaidQueue.then(async (): Promise<MermaidResult | null> => {
+    await new Promise((r) => setTimeout(r, 0))
+    const hit = mermaidCache.get(key)
+    if (hit) return hit
+    if (isCancelled()) return null
+    const { default: mermaid } = await import('mermaid')
+    if (mermaidTheme !== theme) {
       mermaid.initialize({
         startOnLoad: false,
         securityLevel: 'strict',
-        theme: resolvedTheme === 'dark' ? 'dark' : 'neutral',
+        theme,
         fontFamily: 'Inter, ui-sans-serif, system-ui',
       })
-      try {
-        const { svg } = await mermaid.render(id, code)
-        if (!cancelled) setState({ svg })
-      } catch (e) {
-        document.getElementById('d' + id)?.remove() // mermaid leaves its error graphic in <body>
-        if (!cancelled) setState({ error: e instanceof Error ? e.message : String(e) })
-      }
+      mermaidTheme = theme
+    }
+    const id = `mmd${++mermaidSeq}`
+    let result: MermaidResult
+    try {
+      result = { svg: (await mermaid.render(id, code)).svg }
+    } catch (e) {
+      document.getElementById('d' + id)?.remove() // mermaid leaves its error graphic in <body>
+      result = { error: e instanceof Error ? e.message : String(e) }
+    }
+    if (mermaidCache.size >= MERMAID_CACHE_MAX) mermaidCache.delete(mermaidCache.keys().next().value!)
+    mermaidCache.set(key, result)
+    return result
+  })
+  mermaidQueue = job.catch(() => {})
+  return job
+}
+
+function Mermaid({ code }: { code: string }) {
+  const { resolvedTheme } = useUI()
+  const theme = resolvedTheme === 'dark' ? 'dark' : 'neutral'
+  const [rendered, setState] = useState<MermaidResult>({})
+  const cached = mermaidCache.get(`${theme}\n${code}`)
+  const state = cached ?? rendered
+
+  useEffect(() => {
+    if (mermaidCache.has(`${theme}\n${code}`)) return
+    let cancelled = false
+    renderMermaid(code, theme, () => cancelled).then((result) => {
+      if (result && !cancelled) setState(result)
     })
     return () => {
       cancelled = true
     }
-  }, [code, id, resolvedTheme])
+  }, [code, theme])
 
   if (state.error) {
     return (
@@ -172,7 +207,8 @@ const components: Components = {
   pre({ node, children }) {
     const lang = languageOf(node)
     const text = node ? toString(node) : ''
-    if (lang === 'mermaid') return <Mermaid code={text} />
+    // Keyed by the code: a different diagram (e.g. after switching docs) never shows the previous one.
+    if (lang === 'mermaid') return <Mermaid key={text} code={text} />
     return (
       <CodeBlock lang={lang} text={text}>
         {children}
@@ -219,18 +255,42 @@ function rehypeTrimCode() {
 const remarkPlugins = [remarkGfm]
 const rehypePlugins = [rehypeSlug, rehypeTrimCode, [rehypeHighlight, { detect: false, plainText: PLAIN }] as const]
 
+// Parsing + highlighting a long document takes a while; the last few documents are kept rendered,
+// so switching back and forth between them is instant.
+const renderCache = new Map<string, ReactNode>()
+const RENDER_CACHE_MAX = 12
+
+function renderMarkdown(content: string, cache: boolean) {
+  const hit = cache && renderCache.get(content)
+  if (hit) {
+    renderCache.delete(content) // most recently used last
+    renderCache.set(content, hit)
+    return hit
+  }
+  // react-markdown's sync component is a pure function (no hooks), so its output can be reused.
+  const tree = Markdown({
+    remarkPlugins,
+    rehypePlugins: rehypePlugins as never,
+    components,
+    children: stripFrontmatter(content),
+  })
+  if (cache) {
+    if (renderCache.size >= RENDER_CACHE_MAX) renderCache.delete(renderCache.keys().next().value!)
+    renderCache.set(content, tree)
+  }
+  return tree
+}
+
 export const MarkdownView = memo(function MarkdownView({
   content,
   className,
+  cache = false,
 }: {
   content: string
   className?: string
+  /** Keep the rendered result for next time (whole documents; not text that changes as you type). */
+  cache?: boolean
 }) {
-  return (
-    <div className={clsx('markdown', className)}>
-      <Markdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins as never} components={components}>
-        {stripFrontmatter(content)}
-      </Markdown>
-    </div>
-  )
+  const tree = useMemo(() => renderMarkdown(content, cache), [content, cache])
+  return <div className={clsx('markdown', className)}>{tree}</div>
 })

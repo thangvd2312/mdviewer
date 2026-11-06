@@ -125,7 +125,7 @@ export function BlogPost() {
             <h1>{title || doc.title}</h1>
           </div>
           <Byline doc={doc} />
-          <MarkdownView content={body} />
+          <MarkdownView content={body} cache />
 
           <div className="mt-12 flex flex-wrap items-center gap-2 border-t border-line pt-6">
             {doc.topics.length > 0 && (

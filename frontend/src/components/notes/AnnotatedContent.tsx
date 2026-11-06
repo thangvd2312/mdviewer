@@ -396,7 +396,7 @@ export const AnnotatedContent = memo(function AnnotatedContent({
           })
         }}
       >
-        <MarkdownView content={content} />
+        <MarkdownView content={content} cache />
       </div>
 
       {markers.map(({ a, top }) => {
