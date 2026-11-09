@@ -1,7 +1,6 @@
-# CI on every push/PR (GitHub-hosted). Deploy on push to main via the self-hosted runner on the server.
-# The server is only reachable over Tailscale, so the runner installed on it pulls jobs from GitHub
-# instead of GitHub connecting in. The deploy job never runs for pull requests, so code from forks
-# can't execute on the server.
+# CI cho mọi push/PR (GitHub-hosted). Push lên main → build image → ghcr.io/thangvd2312/mdviewer:main
+# → k3s tự kéo về và triển khai (CronJob autodeploy). Không còn self-hosted runner trên ZBook.
+# Code từ PR/fork không bao giờ được build image hay chạm vào cụm.
 name: CI/CD
 
 on:
@@ -12,7 +11,10 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}   # main: xếp hàng, :main chỉ đổi khi lần trước verify xong
+
+env:
+  CONTEXTS: k3s/mdviewer
 
 jobs:
   check:
@@ -31,64 +33,62 @@ jobs:
       - name: Typecheck, lint & build
         run: npm run check
 
-  deploy:
+  image:
     needs: check
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, mdviewer]
-    timeout-minutes: 20
-    concurrency:
-      group: deploy-mdviewer
-      cancel-in-progress: false
-    env:
-      APP_DIR: /home/thangvv/apps/mdviewer
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # Dockerfile + .dockerignore ở gốc repo. Label revision = commit -> autodeploy trong k3s đọc để báo status về đúng commit.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/${{ github.repository }}:main
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          build-args: APP_VERSION=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Sync code into the app directory (keeps .env, node_modules)
+  # k3s chỉ vào được qua Tailscale nên GitHub không gọi vào. CronJob "autodeploy" trong cụm (2 phút/lần) tự kéo image mới
+  # rồi gửi commit status "k3s/<deployment>". Job này chờ status đó: run xanh = app mới đã thật sự chạy trên k3s.
+  verify:
+    needs: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      statuses: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Chờ k3s triển khai (${{ env.CONTEXTS }})
         run: |
-          mkdir -p "$APP_DIR"
-          rsync -a --delete \
-            --exclude .git --exclude node_modules --exclude dist --exclude .env \
-            ./ "$APP_DIR/"
-
-      - name: Install & build
-        working-directory: ${{ env.APP_DIR }}
-        run: |
-          npm run install:all
-          npm run build
-
-      # The repo is public, so the assistant's API key lives in the repo secret ASSISTANT_API_KEY
-      # and is written into the server's .env here. Without the secret, .env is left untouched.
-      - name: Assistant config from repo secrets
-        env:
-          ASSISTANT_API_KEY: ${{ secrets.ASSISTANT_API_KEY }}
-          ASSISTANT_BASE_URL: ${{ vars.ASSISTANT_BASE_URL || 'https://9router.tidesquare.vn/v1' }}
-          # GitHub logins / emails without a daily allowance (comma-separated).
-          ASSISTANT_UNLIMITED_USERS: ${{ vars.ASSISTANT_UNLIMITED_USERS || 'thangvd2312' }}
-        run: |
-          if [ -z "$ASSISTANT_API_KEY" ]; then echo "ASSISTANT_API_KEY secret not set; leaving .env as is"; exit 0; fi
-          f="$APP_DIR/.env"
-          touch "$f"
-          upsert() {
-            grep -v "^$1=" "$f" > "$f.tmp" || true
-            printf '%s=%s\n' "$1" "$2" >> "$f.tmp"
-            cat "$f.tmp" > "$f" && rm "$f.tmp"
-          }
-          upsert ASSISTANT_BASE_URL "$ASSISTANT_BASE_URL"
-          upsert ASSISTANT_API_KEY "$ASSISTANT_API_KEY"
-          upsert ASSISTANT_UNLIMITED_USERS "$ASSISTANT_UNLIMITED_USERS"
-          echo "assistant config written to .env"
-
-      - name: Reload app (pm2) — migrations run on startup
-        working-directory: ${{ env.APP_DIR }}
-        run: |
-          pm2 startOrReload ecosystem.config.cjs --update-env
-          pm2 save
-
-      - name: Health check
-        run: |
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:4100/api/health; then echo; echo "✅ deployed $GITHUB_SHA"; exit 0; fi
-            sleep 2
+          for i in $(seq 1 150); do
+            done_all=1
+            for c in $CONTEXTS; do
+              st=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/status" --jq ".statuses[] | select(.context==\"$c\") | .state + \"|\" + .description")
+              case "${st%%|*}" in
+                success) ;;
+                failure|error) echo "❌ $c: ${st#*|}"; echo "Xem log: kubectl -n apps logs -l app=autodeploy --tail=100"; exit 1 ;;
+                *) done_all=0 ;;
+              esac
+            done
+            if [ $done_all = 1 ]; then echo "✅ $CONTEXTS đã chạy commit $GITHUB_SHA"; exit 0; fi
+            sleep 10
           done
-          echo "❌ app did not become healthy"; pm2 logs mdviewer --lines 80 --nostream; exit 1
+          echo "❌ Quá 25 phút chưa thấy k3s triển khai (CronJob autodeploy có chạy không?)"; exit 1
