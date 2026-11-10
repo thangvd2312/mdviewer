@@ -97,7 +97,8 @@ Trợ lý gọi bất kỳ endpoint nào tương thích OpenAI Chat Completions.
   - phần tác giả tự đánh dấu: `||chữ||` → `***`; `<!-- private -->…<!-- /private -->` → bỏ hẳn (thiếu thẻ đóng thì ẩn tới cuối bài).
 
   Tiêu đề, mô tả, chủ đề và slug lấy từ bản đã che; tìm kiếm trên blog cũng chỉ chạy trên bản này, nên không dò ngược được nội dung bị che. Hộp thoại Share liệt kê trước những gì sẽ bị che (`GET /api/docs/:id/sensitive`). Phát hiện dựa trên mẫu nên không bắt được mọi thứ: mật khẩu viết trơn giữa câu không có nhãn thì phải tự đánh dấu.
-- **Link preview**: server chèn `<title>` và thẻ Open Graph cho `/blog`, `/blog/<slug>` và `/u/<login>`, nên dán link vào Messenger/Zalo/Slack hiện tiêu đề và mô tả.
+- **Series** (gom bài theo project): trong project bấm **Share** → bật *Publish as a series*. Trang `/blog/series/<slug>` liệt kê các bài **đã public** của project theo thứ tự; tài liệu riêng tư không xuất hiện (nút *Publish N private docs* public luôn phần còn lại), tài liệu mới thêm vẫn riêng tư cho tới khi tự public. Thứ tự = thứ tự trong project: bấm **Reorder** rồi dùng mũi tên lên/xuống, chưa sắp thì theo tên (số trong tên sắp tự nhiên: "Phần 2" trước "Phần 10"). Mỗi bài trong series có khung *Series · Part 2 of 5* (mở được danh sách các phần) và nút bài trước/bài sau ở cuối. Series hiện trên blog (cột bên, hàng vuốt trên điện thoại) và trang tác giả. Gỡ public series thì từng bài vẫn giữ trạng thái public của nó; slug series giữ nguyên khi public lại.
+- **Link preview**: server chèn `<title>` và thẻ Open Graph cho `/blog`, `/blog/<slug>`, `/blog/series/<slug>` và `/u/<login>`, nên dán link vào Messenger/Zalo/Slack hiện tiêu đề và mô tả.
 - **Bình luận** (trả lời 1 cấp): người đăng nhập bình luận bằng tên GitHub; người chưa đăng nhập bình luận ẩn danh (tên tuỳ chọn). Mỗi bình luận lưu IP (lấy từ `CF-Connecting-IP` của Cloudflare Tunnel) và thiết bị; không bao giờ hiện công khai, có dòng thông báo cho người bình luận. Khách sửa/xoá được bình luận của mình trong 24 giờ (bí mật lưu trong trình duyệt, server chỉ giữ hash). Bình luận mới nhất lên đầu, tải 20 luồng mỗi lần, mỗi luồng 10 câu trả lời đầu + *Show more replies*.
 - **Chống spam**: khách tối đa 5 bình luận/10 phút và 30/ngày theo IP, người đăng nhập 10/100 theo tài khoản (giới hạn trong bộ nhớ, xoá bình luận không được trả lại lượt; sửa bình luận cũng tính); chặn bình luận trùng nội dung trong 24 giờ; bẫy bot (ô ẩn + gửi quá nhanh); tối đa 2 link (khách) / 5 link (người đăng nhập); chỉ nhận JSON và đúng `Origin` để trang web khác không thể bắt trình duyệt người dùng gửi bình luận hộ.
 - **Kiểm duyệt** (chủ bài, ngay trên trang public): ẩn/hiện, xoá, chặn người bình luận (theo tài khoản; khách theo IP — không ảnh hưởng người đã đăng nhập dùng chung mạng), tắt bình luận cho từng bài. Danh sách người bị chặn và nút *Unblock* nằm trong hộp thoại Share. Chặn theo IP tự hết hạn sau 180 ngày.
@@ -166,11 +167,15 @@ Tất cả route (trừ `auth/github*`) cần header `Authorization: Bearer <tok
 | GET | `/api/assistant/conversations` | `?page=&docId=&projectId=&limit=` → các cuộc trò chuyện đã lưu, mới nhất trước |
 | GET | `/api/assistant/conversations/:id` | Cuộc trò chuyện kèm toàn bộ tin nhắn |
 | PUT | `/api/docs/:id/sharing` | `{ public?, allowComments? }` — publish / gỡ public, bật/tắt bình luận |
+| PUT | `/api/projects/:id/sharing` | `{ public, publishDocs? }` — public project thành series (`publishDocs`: public luôn các tài liệu còn riêng tư) |
+| PUT | `/api/projects/:id/order` | `{ docIds }` — thứ tự tài liệu trong project (cũng là thứ tự series) |
 | GET | `/api/docs/:id/sensitive` | `{ title, findings: [{ kind, value }] }` — những gì người đọc sẽ không thấy khi bài public |
 | GET | `/api/public/docs` | Bài trên blog: `?q=&sort=latest\|popular&author=&topic=&offset=&limit=` (không cần đăng nhập) |
 | GET | `/api/public/authors/:login` | Trang tác giả: tên, avatar, số bài, tổng lượt xem |
 | GET | `/api/public/topics` | Các chủ đề phổ biến trên blog |
-| GET | `/api/public/docs/:slug` | Bài public (không cần đăng nhập) |
+| GET | `/api/public/docs/:slug` | Bài public (không cần đăng nhập), kèm `series` (tên, vị trí, các phần) nếu thuộc một series |
+| GET | `/api/public/series` | Các series: `?author=&limit=` |
+| GET | `/api/public/series/:slug` | Trang series: các bài đã public theo thứ tự |
 | GET | `/api/public/docs/:slug/comments` | 20 luồng bình luận mới nhất, `?before=<nextCursor>` để tải thêm |
 | GET | `/api/public/comments/:id/replies` | Thêm câu trả lời, `?after=<moreReplies>` |
 | POST | `/api/public/docs/:slug/comments` | `{ body, parentId?, guestName?, elapsedMs }` — khách nhận `guestToken` |

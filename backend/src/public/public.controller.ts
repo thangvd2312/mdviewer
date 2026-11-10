@@ -29,6 +29,7 @@ import {
   ExploreQuery,
   HideCommentDto,
   RepliesQuery,
+  SeriesQuery,
   SlugParam,
   UpdateCommentDto,
 } from './public.dto';
@@ -41,6 +42,8 @@ import {
   CreatedCommentDto,
   ExplorePageDto,
   PublicDocDto,
+  PublicSeriesDto,
+  PublicSeriesSummaryDto,
   RepliesPageDto,
   TopicDto,
 } from './public.responses.dto';
@@ -77,6 +80,18 @@ export class PublicController {
   @Get('topics')
   topics(): Promise<TopicDto[]> {
     return this.docs.topics();
+  }
+
+  /** Series (projects published as one), the most recently added to first. */
+  @Get('series')
+  seriesList(@Query() query: SeriesQuery): Promise<PublicSeriesSummaryDto[]> {
+    return this.docs.seriesList(query);
+  }
+
+  /** A series page: its published documents in order. */
+  @Get('series/:slug')
+  series(@Param() { slug }: SlugParam): Promise<PublicSeriesDto> {
+    return this.docs.series(slug);
   }
 
   /** The reading page: a published document and its author. Counts a view (once per reader per few hours). */

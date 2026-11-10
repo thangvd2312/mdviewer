@@ -1,14 +1,16 @@
 import clsx from 'clsx'
-import { Ellipsis, FilePlus2, Pencil, Trash2, Upload } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, Ellipsis, FilePlus2, Globe, Library, Pencil, Trash2, Upload } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { TopBar } from '../components/AppLayout'
 import { DocRow } from '../components/DocRow'
 import { ProjectDialog } from '../components/ProjectDialog'
-import { Button, buttonClass, ConfirmDialog, Menu, MenuItem } from '../components/ui'
+import { ProjectShareDialog } from '../components/ProjectShareDialog'
+import { Button, buttonClass, ConfirmDialog, IconButton, Menu, MenuItem } from '../components/ui'
 import { usePageAssistant } from '../lib/assistant'
 import { timeAgo } from '../lib/format'
-import { useDeleteProject, useDocs, useProjects } from '../lib/queries'
+import type { DocSummary } from '../lib/api'
+import { projectOrder, useDeleteProject, useDocs, useProjects, useReorderDocs } from '../lib/queries'
 import { useUI } from '../lib/ui'
 import { useImportFiles } from '../lib/useImportFiles'
 import { NotFound, PageLoading } from './NotFound'
@@ -25,14 +27,14 @@ export function ProjectPage() {
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [dragging, setDragging] = useState(false)
+  const [sharing, setSharing] = useState(false)
+  const [reordering, setReordering] = useState(false)
 
   const project = projects?.find((p) => p.id === id)
   usePageAssistant(project ? { context: { page: 'project', projectId: project.id }, title: `${project.icon} ${project.name}` } : null)
   const docs = useMemo(
     () =>
-      allDocs
-        .filter((d) => d.projectId === id)
-        .sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true })),
+      allDocs.filter((d) => d.projectId === id).sort(projectOrder),
     [allDocs, id],
   )
   const lastUpdated = docs.reduce<string | undefined>((max, d) => (!max || d.updatedAt > max ? d.updatedAt : max), undefined)
@@ -65,6 +67,14 @@ export function ProjectPage() {
             />
             <Button variant="ghost" onClick={() => fileInput.current?.click()} disabled={importing}>
               <Upload className="size-3.5" /> <span className="max-sm:hidden">{importing ? 'Importing…' : 'Import'}</span>
+            </Button>
+            <Button variant="ghost" onClick={() => setSharing(true)} title="Share as a series">
+              {project.publishedAt ? (
+                <Globe className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <Library className="size-3.5" />
+              )}
+              <span className="max-sm:hidden">{project.publishedAt ? 'Series' : 'Share'}</span>
             </Button>
             <Link to={`/new?project=${project.id}`} className={buttonClass('primary')}>
               <FilePlus2 className="size-3.5" /> <span className="max-sm:hidden">New document</span>
@@ -101,15 +111,35 @@ export function ProjectPage() {
           </div>
           <h1 className="mt-5 text-[28px] font-semibold tracking-tight">{project.name}</h1>
           {project.description && <p className="mt-1.5 text-[15px] leading-relaxed text-ink-muted">{project.description}</p>}
-          <p className="mt-3 text-[12.5px] text-ink-faint">
-            {docs.length} {docs.length === 1 ? 'document' : 'documents'}
-            {lastUpdated && ` · last updated ${timeAgo(lastUpdated)}`}
-          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-ink-faint">
+            <span>
+              {docs.length} {docs.length === 1 ? 'document' : 'documents'}
+              {lastUpdated && ` · last updated ${timeAgo(lastUpdated)}`}
+            </span>
+            {project.publishedAt && project.slug && (
+              <Link
+                to={`/blog/series/${project.slug}`}
+                className="inline-flex items-center gap-1 font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+              >
+                <Globe className="size-3.5" /> Series on the blog
+              </Link>
+            )}
+          </div>
 
           <div className="mt-8 border-t border-line pt-4">
-            {docs.map((d) => (
-              <DocRow key={d.id} doc={d} time="updated" />
-            ))}
+            {docs.length > 1 && (
+              <div className="-mt-1 mb-2 flex justify-end">
+                <Button variant="ghost" className="h-8" onClick={() => setReordering((r) => !r)}>
+                  {reordering ? <Check className="size-3.5" /> : <ArrowUpDown className="size-3.5" />}
+                  {reordering ? 'Done' : 'Reorder'}
+                </Button>
+              </div>
+            )}
+            {reordering ? (
+              <ReorderList projectId={project.id} docs={docs} />
+            ) : (
+              docs.map((d) => <DocRow key={d.id} doc={d} time="updated" />)
+            )}
             {docs.length === 0 && (
               <div
                 className={clsx(
@@ -139,6 +169,7 @@ export function ProjectPage() {
       </div>
 
       <ProjectDialog open={editing} onClose={() => setEditing(false)} project={project} />
+      <ProjectShareDialog open={sharing} onClose={() => setSharing(false)} project={project} docs={docs} />
       <ConfirmDialog
         open={confirmDelete}
         title="Delete project?"
@@ -154,5 +185,34 @@ export function ProjectPage() {
         onClose={() => setConfirmDelete(false)}
       />
     </>
+  )
+}
+
+/** Move documents up and down; each move is saved (the order is also the series order). */
+function ReorderList({ projectId, docs }: { projectId: string; docs: DocSummary[] }) {
+  const reorder = useReorderDocs()
+  const { toast } = useUI()
+  const move = (from: number, to: number) => {
+    const ids = docs.map((d) => d.id)
+    const [moved] = ids.splice(from, 1)
+    ids.splice(to, 0, moved!)
+    reorder.mutate({ projectId, docIds: ids }, { onError: () => toast('Couldn’t save the order') })
+  }
+  return (
+    <ol className="space-y-1">
+      {docs.map((d, i) => (
+        <li key={d.id} className="flex items-center gap-3 rounded-xl border border-line px-3 py-2">
+          <span className="w-5 shrink-0 text-right text-[12.5px] text-ink-faint tabular-nums">{i + 1}</span>
+          <span className="min-w-0 flex-1 truncate text-[14px] font-medium">{d.title}</span>
+          {d.publishedAt && <Globe className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-label="Public" />}
+          <IconButton className="disabled:pointer-events-none disabled:opacity-30" label={`Move ${d.title} up`} disabled={i === 0} onClick={() => move(i, i - 1)}>
+            <ArrowUp />
+          </IconButton>
+          <IconButton className="disabled:pointer-events-none disabled:opacity-30" label={`Move ${d.title} down`} disabled={i === docs.length - 1} onClick={() => move(i, i + 1)}>
+            <ArrowDown />
+          </IconButton>
+        </li>
+      ))}
+    </ol>
   )
 }

@@ -26,6 +26,50 @@ export class ExplorePageDto {
   hasMore: boolean;
 }
 
+/** A post of a series, in the series' list. */
+export class SeriesPartDto {
+  slug: string;
+  title: string;
+}
+
+/** The series a post belongs to, to move between its parts. */
+export class SeriesNavDto {
+  slug: string;
+  name: string;
+  icon: string;
+  /** 0-based position of this post among `parts`. */
+  index: number;
+  parts: SeriesPartDto[];
+}
+
+/** A series (a published project) as listed on the blog. */
+export class PublicSeriesSummaryDto {
+  slug: string;
+  name: string;
+  description: string | null;
+  icon: string;
+  publishedAt: string;
+  /** When its latest part was published. */
+  lastPublishedAt: string;
+  partCount: number;
+  readMinutes: number;
+  viewCount: number;
+  author: PublicAuthorDto;
+}
+
+/** A series page: the project and its published documents, in order. */
+export class PublicSeriesDto {
+  slug: string;
+  name: string;
+  description: string | null;
+  icon: string;
+  publishedAt: string;
+  readMinutes: number;
+  viewCount: number;
+  author: PublicAuthorDto;
+  parts: PublicDocSummaryDto[];
+}
+
 /** A published document on its reading page. */
 export class PublicDocDto extends PublicDocSummaryDto {
   id: string;
@@ -34,6 +78,8 @@ export class PublicDocDto extends PublicDocSummaryDto {
   allowComments: boolean;
   /** The viewer wrote it. */
   isOwner: boolean;
+  /** Its series, when its project is published as one. */
+  series: SeriesNavDto | null;
 }
 
 /** An author's public profile. */

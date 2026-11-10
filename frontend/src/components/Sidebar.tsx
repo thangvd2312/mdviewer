@@ -26,7 +26,7 @@ import type { DocSummary } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { initials } from '../lib/format'
 import { useInstallApp } from '../lib/pwa'
-import { useDocs, useProjects, useReviewSummary } from '../lib/queries'
+import { projectOrder, useDocs, useProjects, useReviewSummary } from '../lib/queries'
 import { useStoredState } from '../lib/storage'
 import { useUI, type ThemePref } from '../lib/ui'
 import { ProjectDialog } from './ProjectDialog'
@@ -60,7 +60,8 @@ export function Sidebar() {
       if (d.projectId) byProject.set(d.projectId, [...(byProject.get(d.projectId) ?? []), d])
       else loose.push(d)
     }
-    byProject.forEach((list) => list.sort(byTitle))
+    // Same order as the project page (and its series).
+    byProject.forEach((list) => list.sort(projectOrder))
     return { byProject, loose: loose.sort(byTitle), recents: docs.slice(0, 8) }
   }, [docs])
 

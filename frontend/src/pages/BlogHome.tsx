@@ -3,11 +3,11 @@ import { ArrowRight, Hash, PenLine, Search, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { BlogFooter } from '../components/blog/BlogLayout'
-import { FeaturedPost, PostRow, PostsSkeleton, RankedPosts, topicUrl } from '../components/blog/Posts'
+import { FeaturedPost, PostRow, PostsSkeleton, RankedPosts, SeriesCard, topicUrl } from '../components/blog/Posts'
 import { Button, buttonClass, Spinner } from '../components/ui'
 import { usePageAssistant } from '../lib/assistant'
 import { useAuth } from '../lib/auth'
-import { useExplore, usePublicDocs, useTopics } from '../lib/queries'
+import { useExplore, usePublicDocs, useSeriesList, useTopics } from '../lib/queries'
 
 type Sort = 'latest' | 'popular'
 
@@ -59,6 +59,8 @@ export function BlogHome() {
   const rest = featured ? items.slice(1) : items
   const popular = usePublicDocs({ sort: 'popular', limit: 5 })
   const topics = useTopics()
+  const series = useSeriesList({ limit: 6 })
+  const seriesList = series.data ?? []
 
   // Load the next page when the end of the list comes into view.
   const sentinel = useRef<HTMLDivElement>(null)
@@ -160,6 +162,22 @@ export function BlogHome() {
               </div>
             )}
 
+            {/* Phones and tablets: series as a swipeable row of cards. */}
+            {!filtered && seriesList.length > 0 && (
+              <section className="mt-6 lg:hidden">
+                <h2 className="mb-3 text-[12px] font-semibold tracking-wide text-ink-faint uppercase">Series</h2>
+                <div className="-mx-4 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <div className="flex w-max gap-3">
+                    {seriesList.map((s) => (
+                      <div key={s.slug} className="w-72 shrink-0">
+                        <SeriesCard series={s} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            )}
+
             {q && (
               <div className="mt-4 flex items-center gap-2 text-[13.5px] text-ink-muted">
                 Results for <span className="font-medium text-ink">“{q}”</span>
@@ -222,6 +240,16 @@ export function BlogHome() {
                 <section>
                   <h2 className="mb-4 text-[12px] font-semibold tracking-wide text-ink-faint uppercase">Most read</h2>
                   <RankedPosts docs={popular.data!.items} />
+                </section>
+              )}
+              {seriesList.length > 0 && (
+                <section>
+                  <h2 className="mb-3 text-[12px] font-semibold tracking-wide text-ink-faint uppercase">Series</h2>
+                  <div className="space-y-2.5">
+                    {seriesList.slice(0, 4).map((s) => (
+                      <SeriesCard key={s.slug} series={s} />
+                    ))}
+                  </div>
                 </section>
               )}
               {topicList.length > 0 && (

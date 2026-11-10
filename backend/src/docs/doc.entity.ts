@@ -41,6 +41,13 @@ export class Doc {
   @Column({ length: 255 })
   title: string;
 
+  /**
+   * Place in its project, and in the series when the project is published. Set when the author
+   * reorders; null = after the ordered ones, by title.
+   */
+  @Column({ type: 'int', nullable: true })
+  position: number | null;
+
   @Column({ type: 'longtext' })
   content: string;
 

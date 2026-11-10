@@ -4,11 +4,11 @@ import { useEffect, useRef } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { Avatar } from '../components/Avatar'
 import { BlogFooter } from '../components/blog/BlogLayout'
-import { PostRow, PostsSkeleton } from '../components/blog/Posts'
+import { PostRow, PostsSkeleton, SeriesCard } from '../components/blog/Posts'
 import { Button, buttonClass, Spinner } from '../components/ui'
 import { ApiError } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import { useAuthor, useExplore } from '../lib/queries'
+import { useAuthor, useExplore, useSeriesList } from '../lib/queries'
 import { PageLoading } from './NotFound'
 
 /** An author's public page: who they are and everything they've published. /u/<login> */
@@ -19,6 +19,7 @@ export function AuthorPage() {
   const sort = params.get('sort') === 'popular' ? 'popular' : 'latest'
   const profile = useAuthor(login)
   const feed = useExplore({ author: login, sort })
+  const series = useSeriesList({ author: login, limit: 50 }, Boolean(login))
   const items = feed.data?.pages.flatMap((p) => p.items) ?? []
   const isMe = user?.githubLogin === login
 
@@ -106,6 +107,17 @@ export function AuthorPage() {
             </Link>
           )}
         </header>
+
+        {(series.data?.length ?? 0) > 0 && (
+          <section className="mt-10">
+            <h2 className="border-b border-line pb-3 text-[15px] font-semibold">Series</h2>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {series.data!.map((s) => (
+                <SeriesCard key={s.slug} series={s} hideAuthor />
+              ))}
+            </div>
+          </section>
+        )}
 
         <div className="mt-10 flex items-center justify-between gap-3 border-b border-line">
           <h2 className="pb-3 text-[15px] font-semibold">Posts</h2>

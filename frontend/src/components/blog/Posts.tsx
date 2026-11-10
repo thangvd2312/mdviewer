@@ -1,11 +1,12 @@
 import clsx from 'clsx'
-import { Clock, Eye, MessageCircle } from 'lucide-react'
+import { Clock, Eye, Layers, MessageCircle } from 'lucide-react'
 import { Link } from 'react-router'
-import type { PublicDocSummary } from '../../lib/api'
+import type { PublicDocSummary, PublicSeriesSummary } from '../../lib/api'
 import { timeAgo } from '../../lib/format'
 import { Avatar } from '../Avatar'
 
 export const postUrl = (slug: string) => `/blog/${slug}`
+export const seriesUrl = (slug: string) => `/blog/series/${slug}`
 export const authorUrl = (login: string) => `/u/${encodeURIComponent(login)}`
 export const topicUrl = (topic: string) => `/blog?topic=${encodeURIComponent(topic)}`
 const compact = (n: number) => new Intl.NumberFormat('en', { notation: 'compact' }).format(n)
@@ -176,5 +177,33 @@ export function PostsSkeleton({ rows = 4 }: { rows?: number }) {
         </div>
       ))}
     </div>
+  )
+}
+
+/** A series in a list: icon, name, author and how much there is to read. */
+export function SeriesCard({ series, hideAuthor }: { series: PublicSeriesSummary; hideAuthor?: boolean }) {
+  return (
+    <article className="group relative flex gap-3.5 rounded-2xl border border-line p-4 transition hover:border-ink-faint/40 hover:bg-hover/40">
+      <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-line bg-raised text-[22px]">
+        {series.icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <h3 className="line-clamp-2 text-[15px] leading-snug font-semibold tracking-tight">
+          <Link to={seriesUrl(series.slug)} className={stretched}>
+            {series.name}
+          </Link>
+        </h3>
+        {series.description && (
+          <p className="mt-0.5 line-clamp-2 text-[13px] leading-snug text-ink-muted">{series.description}</p>
+        )}
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-faint">
+          <span className="flex items-center gap-1.5">
+            <Layers className="size-3.5" /> {series.partCount} {series.partCount === 1 ? 'part' : 'parts'}
+          </span>
+          <span>{series.readMinutes} min read</span>
+          {!hideAuthor && <span className="truncate">by {series.author.name}</span>}
+        </div>
+      </div>
+    </article>
   )
 }

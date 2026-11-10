@@ -19,6 +19,7 @@ const SUMMARY_COLUMNS = [
   'slug',
   'publishedAt',
   'allowComments',
+  'position',
 ] as const;
 
 /** Fields computed on every save: summary and length, and what the blog shows (sensitive parts hidden). */
@@ -104,7 +105,10 @@ export class DocsService {
     if (patch.content !== undefined || patch.title !== undefined) {
       Object.assign(patch, derived(patch.title ?? doc.title, patch.content ?? doc.content));
     }
-    if (dto.projectId !== undefined) patch.projectId = dto.projectId;
+    if (dto.projectId !== undefined && dto.projectId !== doc.projectId) {
+      patch.projectId = dto.projectId;
+      patch.position = null; // goes after the ordered docs of its new project
+    }
     patch.updatedAt = patch.lastOpenedAt = new Date();
     await this.docs.update({ id, ownerId }, patch);
     return this.find(ownerId, id);

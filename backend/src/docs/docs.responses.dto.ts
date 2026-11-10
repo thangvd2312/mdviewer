@@ -13,6 +13,7 @@ export class DocSummaryDto extends PickType(Doc, [
   'slug',
   'publishedAt',
   'allowComments',
+  'position',
 ] as const) {}
 
 const SENSITIVE_KINDS = [

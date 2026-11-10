@@ -57,6 +57,22 @@ export class ExploreQuery {
   limit?: number;
 }
 
+export class SeriesQuery {
+  /** GitHub login of the author. */
+  @Transform(trim)
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  author?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit?: number;
+}
+
 export class CreateCommentDto {
   @IsString()
   @MinLength(1)

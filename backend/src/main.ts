@@ -92,6 +92,24 @@ function serveFrontend(app: NestExpressApplication, webDist: string, siteUrl: st
         type: 'website',
       });
     }
+    const seriesSlug = req.path.match(/^\/blog\/series\/([^/]+)\/?$/)?.[1];
+    if (seriesSlug && SLUG_PATTERN.test(seriesSlug)) {
+      publicDocs
+        .seriesMeta(seriesSlug)
+        .then((meta) =>
+          meta
+            ? page({
+                title: `${meta.title} · viewmd Blog`,
+                description: meta.description || `A series by ${meta.author} on viewmd`,
+                url: `${siteUrl}/blog/series/${seriesSlug}`,
+                image,
+                type: 'website',
+              })
+            : res.type('html').send(template),
+        )
+        .catch(next);
+      return;
+    }
     const slug = req.path.match(/^\/blog\/([^/]+)\/?$/)?.[1];
     if (slug && SLUG_PATTERN.test(slug)) {
       publicDocs

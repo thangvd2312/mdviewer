@@ -17,6 +17,7 @@ import { EditorPage } from './pages/EditorPage'
 import { AuthorPage } from './pages/AuthorPage'
 import { BlogHome } from './pages/BlogHome'
 import { BlogPost } from './pages/BlogPost'
+import { SeriesPage } from './pages/SeriesPage'
 import { FeaturesPage } from './pages/FeaturesPage'
 import { HomePage } from './pages/HomePage'
 import { NotFound } from './pages/NotFound'
@@ -70,6 +71,7 @@ const router = createBrowserRouter([
     element: <BlogLayout />,
     children: [
       { path: 'blog', element: <BlogHome /> },
+      { path: 'blog/series/:slug', element: <SeriesPage /> },
       { path: 'blog/:slug', element: <BlogPost /> },
       { path: 'u/:login', element: <AuthorPage /> },
       { index: true, element: <FeaturesPage /> },

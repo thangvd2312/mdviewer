@@ -11,6 +11,10 @@ export interface Project {
   name: string
   description: string | null
   icon: string
+  /** Public address of the series /blog/series/<slug> (kept after unpublishing); null = never published. */
+  slug: string | null
+  /** Set while the project is a series on the blog; null = private. */
+  publishedAt: string | null
   createdAt: string
   updatedAt: string
 }
@@ -28,6 +32,8 @@ export interface DocSummary {
   /** Set while the doc is public; null = private. */
   publishedAt: string | null
   allowComments: boolean
+  /** Place in its project (and series), set when the author reorders; null = after those, by title. */
+  position: number | null
 }
 
 export type ReviewRating = 'again' | 'hard' | 'good' | 'easy'
@@ -137,6 +143,38 @@ export interface PublicDoc extends PublicDocSummary {
   allowComments: boolean
   /** The viewer wrote it. */
   isOwner: boolean
+  /** Its series, when its project is published as one. */
+  series: SeriesNav | null
+}
+
+/** The series a post belongs to, to move between its parts. */
+export interface SeriesNav {
+  slug: string
+  name: string
+  icon: string
+  /** 0-based position of this post among `parts`. */
+  index: number
+  parts: { slug: string; title: string }[]
+}
+
+/** A series (a project published as one) as listed on the blog. */
+export interface PublicSeriesSummary {
+  slug: string
+  name: string
+  description: string | null
+  icon: string
+  publishedAt: string
+  /** When its latest part was published. */
+  lastPublishedAt: string
+  partCount: number
+  readMinutes: number
+  viewCount: number
+  author: PublicAuthor
+}
+
+/** A series page: its published documents in order. */
+export interface PublicSeries extends Omit<PublicSeriesSummary, 'lastPublishedAt' | 'partCount'> {
+  parts: PublicDocSummary[]
 }
 
 /** An author's public profile. */
@@ -405,6 +443,11 @@ export const api = {
     create: (input: ProjectInput) => request<Project>('POST', '/projects', input),
     update: (id: string, input: ProjectInput) => request<Project>('PATCH', `/projects/${id}`, input),
     remove: (id: string) => request<void>('DELETE', `/projects/${id}`),
+    /** Publish as a series on the blog (only its public docs appear); `publishDocs` publishes the private ones too. */
+    setSharing: (id: string, input: { public: boolean; publishDocs?: boolean }) =>
+      request<Project>('PUT', `/projects/${id}/sharing`, input),
+    /** The project's docs, first to last (also the series order). */
+    reorder: (id: string, docIds: string[]) => request<void>('PUT', `/projects/${id}/order`, { docIds }),
   },
   docs: {
     list: (params: { q?: string; projectId?: string; limit?: number } = {}) =>
@@ -448,6 +491,9 @@ export const api = {
     get: (slug: string) => request<PublicDoc>('GET', `/public/docs/${encodeURIComponent(slug)}`),
     author: (login: string) => request<AuthorProfile>('GET', `/public/authors/${encodeURIComponent(login)}`),
     topics: () => request<{ name: string; count: number }[]>('GET', '/public/topics'),
+    seriesList: (q: { author?: string; limit?: number } = {}) =>
+      request<PublicSeriesSummary[]>('GET', '/public/series' + qs(q)),
+    series: (slug: string) => request<PublicSeries>('GET', `/public/series/${encodeURIComponent(slug)}`),
     comments: (slug: string, before?: string) =>
       request<CommentPage>('GET', `/public/docs/${encodeURIComponent(slug)}/comments` + qs({ before })),
     replies: (commentId: string, after?: string) =>

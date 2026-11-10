@@ -1,14 +1,15 @@
-import { ArrowLeft, ArrowRight, Globe, MessageCircle, Pencil, Share2, Sparkles } from 'lucide-react'
-import { useEffect, useMemo, useRef } from 'react'
+import clsx from 'clsx'
+import { ArrowLeft, ArrowRight, ChevronDown, Globe, Layers, MessageCircle, Pencil, Share2, Sparkles } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useParams } from 'react-router'
 import { Avatar } from '../components/Avatar'
 import { BlogFooter } from '../components/blog/BlogLayout'
-import { authorUrl, PostRow, postUrl, Topics } from '../components/blog/Posts'
+import { authorUrl, PostRow, postUrl, seriesUrl, Topics } from '../components/blog/Posts'
 import { Comments } from '../components/comments/Comments'
 import { OutlineNav, useActiveHeading, useHeadings } from '../components/DocOutline'
 import { MarkdownView } from '../components/MarkdownView'
 import { buttonClass, IconButton } from '../components/ui'
-import { ApiError, type PublicDoc } from '../lib/api'
+import { ApiError, type PublicDoc, type SeriesNav } from '../lib/api'
 import { usePageAssistant } from '../lib/assistant'
 import { useAuth } from '../lib/auth'
 import { timeAgo } from '../lib/format'
@@ -121,11 +122,13 @@ export function BlogPost() {
           </div>
 
           {doc.isOwner && <OwnerNotice doc={doc} />}
+          {doc.series && <SeriesBanner series={doc.series} />}
           <div className="markdown">
             <h1>{title || doc.title}</h1>
           </div>
           <Byline doc={doc} />
           <MarkdownView content={body} cache />
+          {doc.series && <SeriesPager series={doc.series} />}
 
           <div className="mt-12 flex flex-wrap items-center gap-2 border-t border-line pt-6">
             {doc.topics.length > 0 && (
@@ -152,6 +155,100 @@ export function BlogPost() {
       </div>
       <BlogFooter />
     </div>
+  )
+}
+
+/** "Part 2 of 5 in <series>", with the list of parts one tap away. */
+function SeriesBanner({ series }: { series: SeriesNav }) {
+  const [open, setOpen] = useState(false)
+  // A new post (moving through the series) starts with the list closed.
+  const current = series.parts[series.index]?.slug
+  const [shownFor, setShownFor] = useState(current)
+  if (current !== shownFor) {
+    setShownFor(current)
+    setOpen(false)
+  }
+  return (
+    <nav aria-label="Series" className="mb-6 rounded-2xl border border-line bg-raised">
+      <div className="flex items-center gap-3 px-4 py-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-line bg-surface text-[18px]">
+          {series.icon}
+        </span>
+        <div className="min-w-0 flex-1 leading-tight">
+          <div className="flex items-center gap-1.5 text-[11.5px] font-semibold tracking-wide text-accent uppercase">
+            <Layers className="size-3.5" /> Series · Part {series.index + 1} of {series.parts.length}
+          </div>
+          <Link to={seriesUrl(series.slug)} className="mt-0.5 block truncate text-[14.5px] font-semibold hover:underline">
+            {series.name}
+          </Link>
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className={buttonClass('ghost', 'h-8 shrink-0 rounded-full px-2.5 text-[12.5px]')}
+        >
+          <span className="max-sm:hidden">All parts</span>
+          <ChevronDown className={clsx('size-4 transition', open && 'rotate-180')} />
+        </button>
+      </div>
+      {open && (
+        <ol className="max-h-72 overflow-y-auto border-t border-line px-2 py-2">
+          {series.parts.map((p, i) => (
+            <li key={p.slug}>
+              <Link
+                to={postUrl(p.slug)}
+                aria-current={i === series.index ? 'page' : undefined}
+                className={clsx(
+                  'flex gap-3 rounded-lg px-2.5 py-1.5 text-[13.5px] transition',
+                  i === series.index ? 'bg-hover font-medium text-ink' : 'text-ink-muted hover:bg-hover hover:text-ink',
+                )}
+              >
+                <span className="w-5 shrink-0 text-right text-ink-faint tabular-nums">{i + 1}</span>
+                <span className="min-w-0 truncate">{p.title}</span>
+              </Link>
+            </li>
+          ))}
+        </ol>
+      )}
+    </nav>
+  )
+}
+
+/** Previous / next part, at the end of the post. */
+function SeriesPager({ series }: { series: SeriesNav }) {
+  const prev = series.parts[series.index - 1]
+  const next = series.parts[series.index + 1]
+  if (!prev && !next) return null
+  const card = 'group flex min-w-0 flex-1 flex-col rounded-2xl border border-line px-4 py-3 transition hover:border-ink-faint/40 hover:bg-hover/40'
+  return (
+    <nav aria-label="More in this series" className="mt-12 flex flex-col gap-3 sm:flex-row">
+      {prev ? (
+        <Link to={postUrl(prev.slug)} className={card}>
+          <span className="flex items-center gap-1 text-[12px] text-ink-faint">
+            <ArrowLeft className="size-3.5" /> Previous · Part {series.index}
+          </span>
+          <span className="mt-1 line-clamp-2 text-[14.5px] font-medium group-hover:underline">{prev.title}</span>
+        </Link>
+      ) : (
+        <span className="max-sm:hidden sm:flex-1" />
+      )}
+      {next ? (
+        <Link to={postUrl(next.slug)} className={clsx(card, 'sm:items-end sm:text-right')}>
+          <span className="flex items-center gap-1 text-[12px] text-ink-faint">
+            Next · Part {series.index + 2} <ArrowRight className="size-3.5" />
+          </span>
+          <span className="mt-1 line-clamp-2 text-[14.5px] font-medium group-hover:underline">{next.title}</span>
+        </Link>
+      ) : (
+        <Link to={seriesUrl(series.slug)} className={clsx(card, 'sm:items-end sm:text-right')}>
+          <span className="flex items-center gap-1 text-[12px] text-ink-faint">
+            End of the series <ArrowRight className="size-3.5" />
+          </span>
+          <span className="mt-1 line-clamp-2 text-[14.5px] font-medium group-hover:underline">{series.name}</span>
+        </Link>
+      )}
+    </nav>
   )
 }
 

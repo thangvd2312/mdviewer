@@ -38,6 +38,18 @@ export class Project {
   @Column({ length: 16, default: '📁' })
   icon: string;
 
+  /**
+   * Public address of the series (/blog/series/<slug>), made the first time the project is published
+   * and kept after unpublishing so the link stays the same. null = never published.
+   */
+  @Index({ unique: true })
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  slug: string | null;
+
+  /** Set while the project is a series on the blog (its public documents, in order); null = private. */
+  @Column({ type: 'datetime', precision: 3, nullable: true })
+  publishedAt: Date | null;
+
   @ApiHideProperty()
 
   @OneToMany(() => Doc, (doc) => doc.project)

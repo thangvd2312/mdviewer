@@ -47,6 +47,59 @@ export const useAuthor = (login: string | undefined) =>
 export const useTopics = () =>
   useQuery({ queryKey: ['public', 'topics'], queryFn: api.public.topics, staleTime: 5 * 60_000 })
 
+/** Series on the blog (projects published as one), newest additions first. */
+export const useSeriesList = (q: { author?: string; limit?: number } = {}, enabled = true) =>
+  useQuery({ queryKey: ['public', 'series', 'list', q], enabled, queryFn: () => api.public.seriesList(q), staleTime: 60_000 })
+
+export const usePublicSeries = (slug: string | undefined) =>
+  useQuery({
+    queryKey: ['public', 'series', slug],
+    enabled: Boolean(slug),
+    queryFn: () => api.public.series(slug!),
+  })
+
+/** Order of documents in a project, which is also the series order: the author's order, then by title. */
+export const projectOrder = (a: DocSummary, b: DocSummary) =>
+  (a.position ?? Number.MAX_SAFE_INTEGER) - (b.position ?? Number.MAX_SAFE_INTEGER) ||
+  a.title.localeCompare(b.title, undefined, { numeric: true })
+
+/** Publish / unpublish a project as a series (optionally publishing its private docs). */
+export function useSetProjectSharing() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...input }: { id: string; public: boolean; publishDocs?: boolean }) =>
+      api.projects.setSharing(id, input),
+    onSuccess: (project, input) => {
+      queryClient.setQueryData<Project[]>(keys.projects, (list) => list?.map((p) => (p.id === project.id ? project : p)))
+      if (input.publishDocs) {
+        queryClient.invalidateQueries({ queryKey: keys.docs })
+        queryClient.invalidateQueries({ queryKey: ['doc'] })
+      }
+      queryClient.invalidateQueries({ queryKey: ['public'] })
+      queryClient.invalidateQueries({ queryKey: ['explore'] })
+    },
+  })
+}
+
+/** Save the order of a project's documents; the list updates right away. */
+export function useReorderDocs() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ projectId, docIds }: { projectId: string; docIds: string[] }) =>
+      api.projects.reorder(projectId, docIds),
+    onMutate: ({ projectId, docIds }) => {
+      const at = new Map(docIds.map((id, i) => [id, i]))
+      queryClient.setQueryData<DocSummary[]>(keys.docs, (list) =>
+        list?.map((d) => (d.projectId === projectId ? { ...d, position: at.get(d.id) ?? null } : d)),
+      )
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: keys.docs })
+      queryClient.invalidateQueries({ queryKey: ['public', 'series'] })
+    },
+  })
+}
+
 export const usePublicDoc = (slug: string | undefined) =>
   useQuery({ queryKey: keys.publicDoc(slug ?? ''), enabled: Boolean(slug), queryFn: () => api.public.get(slug!) })
 
@@ -92,7 +145,7 @@ export function useSetSharing() {
   })
 }
 
-export const useProjects = () => useQuery({ queryKey: keys.projects, queryFn: api.projects.list })
+export const useProjects = (enabled = true) => useQuery({ queryKey: keys.projects, queryFn: api.projects.list, enabled })
 
 /** Summaries (no content) of every doc the user owns, most recently opened first. */
 export const useDocs = () => useQuery({ queryKey: keys.docs, queryFn: () => api.docs.list({ limit: 1000 }) })
