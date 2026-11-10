@@ -5,6 +5,7 @@ import { Link, useLocation, useParams } from 'react-router'
 import { Avatar } from '../components/Avatar'
 import { BlogFooter } from '../components/blog/BlogLayout'
 import { authorUrl, PostRow, postUrl, seriesUrl, Topics } from '../components/blog/Posts'
+import { SaveButton, useFinishPendingSave } from '../components/blog/SaveButton'
 import { Comments } from '../components/comments/Comments'
 import { OutlineNav, useActiveHeading, useHeadings } from '../components/DocOutline'
 import { MarkdownView } from '../components/MarkdownView'
@@ -14,7 +15,7 @@ import { usePageAssistant } from '../lib/assistant'
 import { useAuth } from '../lib/auth'
 import { timeAgo } from '../lib/format'
 import { readingStats, splitLeadingTitle } from '../lib/markdown'
-import { useAuthor, usePublicDoc, usePublicDocs } from '../lib/queries'
+import { useAuthor, usePublicDoc, usePublicDocs, useSavedSlugs, useSaveMutations } from '../lib/queries'
 import { useUI } from '../lib/ui'
 import { PageLoading } from './NotFound'
 
@@ -27,6 +28,9 @@ export function BlogPost() {
   const { data: doc, isLoading, error } = usePublicDoc(slug)
   const scrollRef = useRef<HTMLDivElement>(null)
   const articleRef = useRef<HTMLElement>(null)
+  const endRef = useRef<HTMLDivElement>(null)
+  useFinishPendingSave(doc?.slug)
+  useMarkReadAtEnd(endRef, scrollRef, doc)
 
   // Title, then the author line, then the body.
   const { title, body } = useMemo(() => splitLeadingTitle(doc?.content ?? ''), [doc?.content])
@@ -106,6 +110,7 @@ export function BlogPost() {
                 <MessageCircle className="size-4" />
                 {doc.commentCount > 0 && doc.commentCount}
               </button>
+              <SaveButton slug={doc.slug} />
               <IconButton label="Share" onClick={share} className="size-9 rounded-full">
                 <Share2 />
               </IconButton>
@@ -128,6 +133,7 @@ export function BlogPost() {
           </div>
           <Byline doc={doc} />
           <MarkdownView content={body} cache />
+          <div ref={endRef} />
           {doc.series && <SeriesPager series={doc.series} />}
 
           <div className="mt-12 flex flex-wrap items-center gap-2 border-t border-line pt-6">
@@ -136,6 +142,7 @@ export function BlogPost() {
                 <Topics topics={doc.topics} size="md" />
               </div>
             )}
+            <SaveButton slug={doc.slug} variant="button" />
             <button type="button" onClick={share} className={buttonClass('secondary', 'h-9 rounded-full px-4')}>
               <Share2 className="size-4" /> Share
             </button>
@@ -156,6 +163,42 @@ export function BlogPost() {
       <BlogFooter />
     </div>
   )
+}
+
+/**
+ * A saved post counts as read once the reader gets to its end: the end has been on screen, even if
+ * they flicked past it (they can mark it unread again in Saved).
+ */
+function useMarkReadAtEnd(
+  endRef: React.RefObject<HTMLDivElement | null>,
+  scrollRef: React.RefObject<HTMLDivElement | null>,
+  doc: PublicDoc | undefined,
+) {
+  const { user } = useAuth()
+  const slugs = useSavedSlugs(Boolean(user))
+  const { read } = useSaveMutations()
+  const { mutate } = read
+  const slug = doc?.slug
+  const pending = Boolean(slug && slugs.data?.has(slug) && !doc?.readAt)
+  useEffect(() => {
+    const end = endRef.current
+    const scroller = scrollRef.current
+    if (!end || !scroller || !pending || !slug) return
+    let done = false
+    const check = () => {
+      if (done || end.getBoundingClientRect().top > scroller.getBoundingClientRect().bottom) return
+      done = true
+      scroller.removeEventListener('scroll', check)
+      mutate({ slug, read: true })
+    }
+    scroller.addEventListener('scroll', check, { passive: true })
+    // A short post fits on screen without scrolling: read once it has been open a few seconds.
+    const timer = setTimeout(check, 5000)
+    return () => {
+      scroller.removeEventListener('scroll', check)
+      clearTimeout(timer)
+    }
+  }, [endRef, scrollRef, pending, slug, mutate])
 }
 
 /** "Part 2 of 5 in <series>", with the list of parts one tap away. */
@@ -358,7 +401,9 @@ function OwnerNotice({ doc }: { doc: PublicDoc }) {
     <div className="mb-6 flex items-center gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.07] px-3.5 py-2.5 text-[13px]">
       <Globe className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
       <span className="min-w-0 flex-1 text-ink-muted">
-        This is your post — <span className="font-medium text-ink">it’s public</span>. Your sticky notes stay private.
+        This is your post — <span className="font-medium text-ink">it’s public</span>.
+        {doc.saveCount ? ` ${doc.saveCount} ${doc.saveCount === 1 ? 'reader' : 'readers'} saved it.` : ''} Your sticky notes
+        stay private.
       </span>
       <Link to={`/d/${doc.id}?share=1`} className="shrink-0 font-medium text-ink underline underline-offset-2">
         Settings

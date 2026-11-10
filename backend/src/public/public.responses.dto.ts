@@ -80,6 +80,12 @@ export class PublicDocDto extends PublicDocSummaryDto {
   isOwner: boolean;
   /** Its series, when its project is published as one. */
   series: SeriesNavDto | null;
+  /** The signed-in reader saved it to read later (null for guests). */
+  saved: boolean | null;
+  /** When the signed-in reader marked it read (null: not saved, not read yet, or a guest). */
+  readAt: string | null;
+  /** How many readers saved it; only for its author (null otherwise). */
+  saveCount: number | null;
 }
 
 /** An author's public profile. */

@@ -1,14 +1,16 @@
-import { ArrowLeft, ArrowRight, Clock, Eye, Layers, Library, Pencil } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Bookmark, BookmarkCheck, Clock, Eye, Layers, Library, Pencil } from 'lucide-react'
 import { useEffect } from 'react'
-import { Link, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { Avatar } from '../components/Avatar'
 import { BlogFooter } from '../components/blog/BlogLayout'
 import { authorUrl, postUrl, Topics } from '../components/blog/Posts'
+import { SaveButton } from '../components/blog/SaveButton'
 import { buttonClass } from '../components/ui'
-import { ApiError, type PublicDocSummary } from '../lib/api'
+import { ApiError, type PublicDocSummary, type PublicSeries } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { timeAgo } from '../lib/format'
-import { useProjects, usePublicSeries } from '../lib/queries'
+import { useProjects, usePublicSeries, useSavedSlugs, useSaveMutations } from '../lib/queries'
+import { useUI } from '../lib/ui'
 import { PageLoading } from './NotFound'
 
 const compact = (n: number) => new Intl.NumberFormat('en', { notation: 'compact' }).format(n)
@@ -106,11 +108,14 @@ export function SeriesPage() {
             </span>
           </div>
 
-          {first && (
-            <Link to={postUrl(first.slug)} className={buttonClass('primary', 'mt-6 h-10 rounded-full px-5')}>
-              Start reading <ArrowRight className="size-4" />
-            </Link>
-          )}
+          <div className="mt-6 flex flex-wrap gap-2">
+            {first && (
+              <Link to={postUrl(first.slug)} className={buttonClass('primary', 'h-10 rounded-full px-5')}>
+                Start reading <ArrowRight className="size-4" />
+              </Link>
+            )}
+            <SaveSeriesButton series={series} />
+          </div>
         </header>
 
         <ol className="mt-10 border-t border-line">
@@ -144,11 +149,44 @@ function Part({ doc, n }: { doc: PublicDocSummary; n: number }) {
         {doc.excerpt && <p className="mt-1 line-clamp-2 text-[14px] leading-relaxed text-ink-muted">{doc.excerpt}</p>}
         <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2">
           <Topics topics={doc.topics} max={3} />
-          <span className="ml-auto text-[12.5px] text-ink-faint">
+          <span className="ml-auto flex items-center gap-2 text-[12.5px] text-ink-faint">
             {doc.readMinutes} min read · {timeAgo(doc.publishedAt)}
+            <SaveButton slug={doc.slug} className="-my-2 -mr-2" />
           </span>
         </div>
       </div>
     </article>
+  )
+}
+
+/** Save every part of the series to read later (or take them all out again). */
+function SaveSeriesButton({ series }: { series: PublicSeries }) {
+  const { user } = useAuth()
+  const { toast } = useUI()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const slugs = useSavedSlugs(Boolean(user))
+  const { series: save } = useSaveMutations()
+  const parts = series.parts.map((p) => p.slug)
+  const all = parts.length > 0 && parts.every((p) => slugs.data?.has(p))
+
+  const onClick = () => {
+    if (!user) {
+      navigate('/login', { state: { from: location.pathname } })
+      return
+    }
+    save.mutate(
+      { slug: series.slug, parts, save: !all },
+      {
+        onSuccess: () => toast(all ? 'Removed the series from Saved' : `Saved ${parts.length} parts — they’re in Saved`),
+        onError: () => toast('Couldn’t update Saved'),
+      },
+    )
+  }
+  return (
+    <button type="button" onClick={onClick} aria-pressed={all} className={buttonClass('secondary', 'h-10 rounded-full px-5')}>
+      {all ? <BookmarkCheck className="size-4 fill-current text-accent" /> : <Bookmark className="size-4" />}
+      {all ? 'Series saved' : 'Save series'}
+    </button>
   )
 }

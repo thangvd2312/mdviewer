@@ -17,6 +17,7 @@ import { EditorPage } from './pages/EditorPage'
 import { AuthorPage } from './pages/AuthorPage'
 import { BlogHome } from './pages/BlogHome'
 import { BlogPost } from './pages/BlogPost'
+import { SavedPage } from './pages/SavedPage'
 import { SeriesPage } from './pages/SeriesPage'
 import { FeaturesPage } from './pages/FeaturesPage'
 import { HomePage } from './pages/HomePage'
@@ -94,6 +95,7 @@ const router = createBrowserRouter([
       { path: 'd/:id/edit', element: <EditorPage /> },
       { path: 'p/:id', element: <ProjectPage /> },
       { path: 'review', element: <ReviewPage /> },
+      { path: 'saved', element: <SavedPage /> },
       { path: 'review/session', element: <ReviewSession /> },
       { path: '*', element: <NotFound /> },
     ],

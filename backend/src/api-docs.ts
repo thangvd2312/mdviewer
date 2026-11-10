@@ -43,7 +43,8 @@ export function setupApiDocs(app: INestApplication) {
     .addTag('assistant', 'Reading assistant: questions about the documents, and the chat history')
     .addTag('review', 'Spaced-repetition questions about the documents')
     .addTag('tokens', 'Personal tokens for AI agents (MCP)')
-    .addTag('public', 'Published documents (the blog), authors and comments')
+    .addTag('public', 'Published documents (the blog), series, authors and comments')
+    .addTag('saved', 'Public posts the reader saved to read later')
     .addTag('health', 'Liveness check')
     .build();
 

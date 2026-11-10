@@ -4,6 +4,7 @@ import { Brackets, IsNull, Not, Repository } from 'typeorm';
 import { Doc } from '../docs/doc.entity';
 import { redactedContent, redactText } from '../docs/redact';
 import { Project } from '../projects/project.entity';
+import { SavedPost } from '../saved/saved-post.entity';
 import { User } from '../users/user.entity';
 import { Comment } from './comment.entity';
 import { ExploreQuery } from './public.dto';
@@ -82,6 +83,7 @@ export class PublicDocsService {
   constructor(
     @InjectRepository(Doc) private readonly docs: Repository<Doc>,
     @InjectRepository(Project) private readonly projects: Repository<Project>,
+    @InjectRepository(SavedPost) private readonly saved: Repository<SavedPost>,
   ) {}
 
   /** Published docs as listed on the blog (rows for `toSummary`). */
@@ -299,6 +301,9 @@ export class PublicDocsService {
       await this.docs.increment({ id: doc.id }, 'viewCount', 1);
       doc.viewCount += 1;
     }
+    const mine = viewer.userId
+      ? await this.saved.findOne({ where: { userId: viewer.userId, docId: doc.id }, select: { id: true, readAt: true } })
+      : null;
     return {
       id: doc.id,
       slug: doc.slug!,
@@ -316,6 +321,11 @@ export class PublicDocsService {
       isOwner,
       author: author(doc.owner),
       series: await this.seriesNav(doc),
+      // The signed-in reader's own state; null for guests.
+      saved: viewer.userId ? Boolean(mine) : null,
+      readAt: mine?.readAt?.toISOString() ?? null,
+      // How many readers saved it: for its author only.
+      saveCount: isOwner ? await this.saved.count({ where: { docId: doc.id } }) : null,
     };
   }
 

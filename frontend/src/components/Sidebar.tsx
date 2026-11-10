@@ -1,5 +1,6 @@
 import clsx from 'clsx'
 import {
+  Bookmark,
   Bot,
   Brain,
   ChevronRight,
@@ -26,7 +27,7 @@ import type { DocSummary } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { initials } from '../lib/format'
 import { useInstallApp } from '../lib/pwa'
-import { projectOrder, useDocs, useProjects, useReviewSummary } from '../lib/queries'
+import { projectOrder, useDocs, useProjects, useReviewSummary, useSavedList } from '../lib/queries'
 import { useStoredState } from '../lib/storage'
 import { useUI, type ThemePref } from '../lib/ui'
 import { ProjectDialog } from './ProjectDialog'
@@ -46,6 +47,7 @@ export function Sidebar() {
   const { data: projects = [] } = useProjects()
   const { data: docs = [] } = useDocs()
   const { data: review } = useReviewSummary()
+  const saved = useSavedList('unread')
   const installApp = useInstallApp()
   const [expanded, setExpanded] = useStoredState<string[]>('viewmd.expanded', [])
   const [creatingProject, setCreatingProject] = useState(false)
@@ -114,6 +116,13 @@ export function Sidebar() {
         <NavLink to="/blog" className={rowClass}>
           <Compass className="size-4 text-ink-muted" />
           Blog
+        </NavLink>
+        <NavLink to="/saved" className={rowClass}>
+          <Bookmark className="size-4 text-ink-muted" />
+          Saved
+          {(saved.data?.pages[0]?.counts.unread ?? 0) > 0 && (
+            <span className="ml-auto text-[12px] text-ink-faint tabular-nums">{saved.data!.pages[0]!.counts.unread}</span>
+          )}
         </NavLink>
         {!installApp.installed && (
           <NavLink to="/#app" className={rowClass}>

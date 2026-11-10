@@ -145,6 +145,32 @@ export interface PublicDoc extends PublicDocSummary {
   isOwner: boolean
   /** Its series, when its project is published as one. */
   series: SeriesNav | null
+  /** The signed-in reader saved it to read later (null for guests). */
+  saved: boolean | null
+  /** When the signed-in reader marked it read. */
+  readAt: string | null
+  /** How many readers saved it; only for its author. */
+  saveCount: number | null
+}
+
+/** A post in the reader's "Saved" list. Unpublished or deleted posts keep only slug, title and dates. */
+export interface SavedItem {
+  slug: string
+  title: string
+  available: boolean
+  excerpt: string | null
+  readMinutes: number | null
+  author: PublicAuthor | null
+  savedAt: string
+  readAt: string | null
+}
+
+export type SavedStatus = 'unread' | 'read' | 'all'
+
+export interface SavedPage {
+  items: SavedItem[]
+  hasMore: boolean
+  counts: { unread: number; read: number }
 }
 
 /** The series a post belongs to, to move between its parts. */
@@ -521,6 +547,17 @@ export const api = {
     blocks: (offset = 0) =>
       request<{ items: CommentBlockInfo[]; hasMore: boolean }>('GET', '/public/blocks' + qs({ offset, limit: 50 })),
     removeBlock: (id: string) => request<void>('DELETE', `/public/blocks/${id}`),
+  },
+  saved: {
+    list: (status: SavedStatus, offset = 0) =>
+      request<SavedPage>('GET', '/saved' + qs({ status, offset, limit: 30 })),
+    slugs: () => request<string[]>('GET', '/saved/slugs'),
+    save: (slug: string) => request<void>('PUT', `/saved/docs/${encodeURIComponent(slug)}`),
+    remove: (slug: string) => request<void>('DELETE', `/saved/docs/${encodeURIComponent(slug)}`),
+    setRead: (slug: string, read: boolean) =>
+      request<void>('PUT', `/saved/docs/${encodeURIComponent(slug)}/read`, { read }),
+    saveSeries: (slug: string) => request<{ saved: number }>('PUT', `/saved/series/${encodeURIComponent(slug)}`),
+    removeSeries: (slug: string) => request<void>('DELETE', `/saved/series/${encodeURIComponent(slug)}`),
   },
   annotations: {
     list: (docId: string) => request<Annotation[]>('GET', `/docs/${docId}/annotations`),

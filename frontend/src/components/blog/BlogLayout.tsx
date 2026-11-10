@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { LibraryBig, PenLine } from 'lucide-react'
+import { Bookmark, LibraryBig, PenLine } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link, Outlet, useLocation } from 'react-router'
 import { AssistantProvider } from '../../lib/assistant'
@@ -63,6 +63,14 @@ function BlogHeader() {
           <ThemeToggle />
           {user ? (
             <>
+              <Link
+                to="/saved"
+                className="grid size-9 place-items-center rounded-full text-ink-muted transition hover:bg-hover hover:text-ink"
+                title="Saved"
+                aria-label="Saved"
+              >
+                <Bookmark className="size-[18px]" />
+              </Link>
               <Link to="/note" className={buttonClass('secondary', 'ml-1 h-9 rounded-full px-3.5')}>
                 <LibraryBig className="size-4" />
                 <span className="max-sm:hidden">My notes</span>

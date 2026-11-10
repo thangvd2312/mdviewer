@@ -10,6 +10,7 @@ import { ProjectsModule } from './projects/projects.module';
 import { McpModule } from './mcp/mcp.module';
 import { PublicModule } from './public/public.module';
 import { ReviewModule } from './review/review.module';
+import { SavedModule } from './saved/saved.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { ReviewModule } from './review/review.module';
     PublicModule,
     McpModule,
     ReviewModule,
+    SavedModule,
   ],
   controllers: [HealthController],
 })

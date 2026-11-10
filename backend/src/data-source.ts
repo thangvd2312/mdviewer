@@ -10,6 +10,7 @@ import { ApiToken } from './tokens/api-token.entity';
 import { ReviewCard, ReviewEvent } from './review/review.entity';
 import { Doc } from './docs/doc.entity';
 import { Project } from './projects/project.entity';
+import { SavedPost } from './saved/saved-post.entity';
 import { User } from './users/user.entity';
 
 export default new DataSource({
@@ -20,6 +21,6 @@ export default new DataSource({
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   charset: 'utf8mb4_unicode_ci',
-  entities: [User, Project, Doc, Annotation, Conversation, Message, Usage, Comment, CommentBlock, ApiToken, ReviewCard, ReviewEvent],
+  entities: [User, Project, Doc, Annotation, Conversation, Message, Usage, Comment, CommentBlock, ApiToken, ReviewCard, ReviewEvent, SavedPost],
   migrations: [__dirname + '/migrations/*.js'],
 });

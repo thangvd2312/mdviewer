@@ -4,6 +4,7 @@ import { Link } from 'react-router'
 import type { PublicDocSummary, PublicSeriesSummary } from '../../lib/api'
 import { timeAgo } from '../../lib/format'
 import { Avatar } from '../Avatar'
+import { SaveButton } from './SaveButton'
 
 export const postUrl = (slug: string) => `/blog/${slug}`
 export const seriesUrl = (slug: string) => `/blog/series/${slug}`
@@ -107,7 +108,10 @@ export function FeaturedPost({ doc }: { doc: PublicDocSummary }) {
       </div>
       <div className="mt-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <Byline doc={doc} size="md" />
-        <Stats doc={doc} />
+        <span className="flex items-center gap-2">
+          <Stats doc={doc} />
+          <SaveButton slug={doc.slug} className="-my-2 -mr-2" />
+        </span>
       </div>
     </article>
   )
@@ -132,8 +136,9 @@ export function PostRow({ doc, hideAuthor }: { doc: PublicDocSummary; hideAuthor
       {doc.excerpt && <p className="mt-1.5 line-clamp-2 text-[14.5px] leading-relaxed text-ink-muted">{doc.excerpt}</p>}
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
         <Topics topics={doc.topics} max={3} />
-        <span className="ml-auto">
+        <span className="ml-auto flex items-center gap-2">
           <Stats doc={doc} />
+          <SaveButton slug={doc.slug} className="-my-2 -mr-2" />
         </span>
       </div>
     </article>

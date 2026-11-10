@@ -10,6 +10,7 @@ import {
   type ExploreQuery,
   type Project,
   type ProjectInput,
+  type SavedStatus,
   type SharingInput,
 } from './api'
 
@@ -98,6 +99,58 @@ export function useReorderDocs() {
       queryClient.invalidateQueries({ queryKey: ['public', 'series'] })
     },
   })
+}
+
+/** Slugs of the posts the signed-in reader saved, to show the Save buttons' state. */
+export const useSavedSlugs = (enabled: boolean) =>
+  useQuery({
+    queryKey: ['saved', 'slugs'],
+    enabled,
+    queryFn: async () => new Set(await api.saved.slugs()),
+    staleTime: 60_000,
+  })
+
+/** The reader's saved posts, a page at a time, with how many are read and unread. */
+export const useSavedList = (status: SavedStatus, enabled = true) =>
+  useInfiniteQuery({
+    queryKey: ['saved', 'list', status],
+    enabled,
+    queryFn: ({ pageParam }) => api.saved.list(status, pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (last, pages) => (last.hasMore ? pages.reduce((n, p) => n + p.items.length, 0) : undefined),
+  })
+
+/** Save / unsave a post or a whole series; the buttons update right away. */
+export function useSaveMutations() {
+  const queryClient = useQueryClient()
+  const setSlugs = (change: (s: Set<string>) => void) =>
+    queryClient.setQueryData<Set<string>>(['saved', 'slugs'], (old) => {
+      const next = new Set(old)
+      change(next)
+      return next
+    })
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['saved'] })
+    queryClient.invalidateQueries({ queryKey: ['public', 'doc'] })
+  }
+  const post = useMutation({
+    mutationFn: ({ slug, save }: { slug: string; save: boolean }) =>
+      save ? api.saved.save(slug) : api.saved.remove(slug),
+    onMutate: ({ slug, save }) => setSlugs((s) => (save ? s.add(slug) : s.delete(slug))),
+    onSettled: refresh,
+  })
+  const series = useMutation({
+    // `parts`: the series' post slugs, to update the buttons before the server answers.
+    mutationFn: ({ slug, save }: { slug: string; parts: string[]; save: boolean }) =>
+      save ? api.saved.saveSeries(slug) : api.saved.removeSeries(slug).then(() => ({ saved: 0 })),
+    onMutate: ({ parts, save }) => setSlugs((s) => parts.forEach((p) => (save ? s.add(p) : s.delete(p)))),
+    onSettled: refresh,
+  })
+  const read = useMutation({
+    mutationFn: ({ slug, read }: { slug: string; read: boolean }) => api.saved.setRead(slug, read),
+    onSettled: refresh,
+  })
+  return { post, series, read }
 }
 
 export const usePublicDoc = (slug: string | undefined) =>
