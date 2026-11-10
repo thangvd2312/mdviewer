@@ -5,10 +5,15 @@ export class SeriesSharingDto {
   @IsBoolean()
   public: boolean;
 
-  /** Also publish the project's private documents (only public documents appear in the series). */
+  /**
+   * The project's documents that should be public (in the series and on the blog); its other
+   * documents become private. Leave out to keep each document as it is.
+   */
   @IsOptional()
-  @IsBoolean()
-  publishDocs?: boolean;
+  @IsArray()
+  @ArrayMaxSize(1000)
+  @IsUUID('all', { each: true })
+  publicDocIds?: string[];
 }
 
 export class ReorderDto {

@@ -63,15 +63,15 @@ export const projectOrder = (a: DocSummary, b: DocSummary) =>
   (a.position ?? Number.MAX_SAFE_INTEGER) - (b.position ?? Number.MAX_SAFE_INTEGER) ||
   a.title.localeCompare(b.title, undefined, { numeric: true })
 
-/** Publish / unpublish a project as a series (optionally publishing its private docs). */
+/** Publish / unpublish a project as a series, optionally choosing which of its docs are public. */
 export function useSetProjectSharing() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, ...input }: { id: string; public: boolean; publishDocs?: boolean }) =>
+    mutationFn: ({ id, ...input }: { id: string; public: boolean; publicDocIds?: string[] }) =>
       api.projects.setSharing(id, input),
     onSuccess: (project, input) => {
       queryClient.setQueryData<Project[]>(keys.projects, (list) => list?.map((p) => (p.id === project.id ? project : p)))
-      if (input.publishDocs) {
+      if (input.publicDocIds) {
         queryClient.invalidateQueries({ queryKey: keys.docs })
         queryClient.invalidateQueries({ queryKey: ['doc'] })
       }

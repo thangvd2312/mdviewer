@@ -443,8 +443,11 @@ export const api = {
     create: (input: ProjectInput) => request<Project>('POST', '/projects', input),
     update: (id: string, input: ProjectInput) => request<Project>('PATCH', `/projects/${id}`, input),
     remove: (id: string) => request<void>('DELETE', `/projects/${id}`),
-    /** Publish as a series on the blog (only its public docs appear); `publishDocs` publishes the private ones too. */
-    setSharing: (id: string, input: { public: boolean; publishDocs?: boolean }) =>
+    /**
+     * Publish as a series on the blog (only its public docs appear), or stop. `publicDocIds`: the project's docs
+     * that should be public, the others become private (left out: each doc stays as it is).
+     */
+    setSharing: (id: string, input: { public: boolean; publicDocIds?: string[] }) =>
       request<Project>('PUT', `/projects/${id}/sharing`, input),
     /** The project's docs, first to last (also the series order). */
     reorder: (id: string, docIds: string[]) => request<void>('PUT', `/projects/${id}/order`, { docIds }),

@@ -22,12 +22,17 @@ export class SeriesService {
 
   async setSharing(ownerId: string, id: string, dto: SeriesSharingDto) {
     const project = await this.projects.get(ownerId, id);
-    if (dto.publishDocs) {
-      const drafts = await this.docsRepo.find({
-        where: { ownerId, projectId: id, publishedAt: IsNull() },
-        select: { id: true },
+    if (dto.publicDocIds) {
+      // Publish the chosen documents and unpublish the rest; ids from outside the project are ignored.
+      const want = new Set(dto.publicDocIds);
+      const docs = await this.docsRepo.find({
+        where: { ownerId, projectId: id },
+        select: { id: true, publishedAt: true },
       });
-      for (const d of drafts) await this.docs.setSharing(ownerId, d.id, { public: true });
+      for (const d of docs) {
+        const isPublic = d.publishedAt !== null;
+        if (want.has(d.id) !== isPublic) await this.docs.setSharing(ownerId, d.id, { public: !isPublic });
+      }
     }
     if (!dto.public) {
       await this.projectsRepo.update({ id, ownerId }, { publishedAt: null });

@@ -15,7 +15,7 @@ export class SeriesController {
 
   /**
    * Publish the project as a series on the blog (/blog/series/<slug>), or stop. Only its public
-   * documents appear, in the project's order; `publishDocs` also publishes the private ones.
+   * documents appear, in the project's order; `publicDocIds` sets which ones are public in one go.
    */
   @Put(':id/sharing')
   setSharing(
