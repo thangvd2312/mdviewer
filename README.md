@@ -196,21 +196,18 @@ Nội dung tối đa khoảng 2 triệu ký tự (body JSON giới hạn 5 MB).
 
 ## Deploy (production)
 
-Production chạy tại **https://mdviewer.thangvu.io.vn**. API còn có domain riêng **https://apimdviewer.thangvu.io.vn** (cùng một app) để chạy frontend ở máy với dữ liệu thật:
+Production chạy tại **https://mdviewer.thangvu.io.vn**, trên cụm **k3s** 3 máy. API còn có domain riêng **https://apimdviewer.thangvu.io.vn** (cùng một app), dùng khi chạy frontend ở máy với dữ liệu thật.
 
-```
-Cloudflare (HTTPS) ── cloudflared tunnel ──► 127.0.0.1:4100  pm2 "mdviewer" (NestJS: /api + React build)
-  mdviewer.thangvu.io.vn, apimdviewer.thangvu.io.vn
-                                                    │
-                                                    └──► 127.0.0.1:3307  MySQL (container kiwi-mysql, database mdviewer)
-```
-
-- **CI/CD** (`.github/workflows/deploy.yml`): mỗi lần push hoặc mở PR sẽ chạy typecheck, lint và build trên runner của GitHub. Riêng push lên `main` thì sẽ deploy thêm qua self-hosted runner trên server (label `mdviewer`): rsync code vào `~/apps/mdviewer`, `npm run install:all`, `npm run build`, `pm2 startOrReload`, rồi gọi `/api/health` để kiểm tra.
-- **Cấu hình server**: file `~/apps/mdviewer/.env` (xem mẫu ở `.env.production.example`). File này không được commit và rsync cũng không ghi đè lên nó.
-- **Key của trợ lý AI**: lưu trong GitHub secret `ASSISTANT_API_KEY` (repo public nên không để trong code). Mỗi lần deploy, workflow ghi `ASSISTANT_API_KEY`, `ASSISTANT_BASE_URL` (biến `vars.ASSISTANT_BASE_URL`, mặc định router 9router) và `ASSISTANT_UNLIMITED_USERS` (biến `vars.ASSISTANT_UNLIMITED_USERS`, mặc định `thangvd2312`) vào `.env` trên server. Đổi key: `gh secret set ASSISTANT_API_KEY` rồi chạy lại workflow.
-- **Database**: migration (`backend/src/migrations`) tự chạy mỗi khi app khởi động (`DB_MIGRATIONS_RUN=true`). Khi đổi entity thì tạo migration mới:
+- **Deploy**: push lên `main` là xong.
+  - GitHub Actions chạy `npm run check`, build image `ghcr.io/thangvd2312/mdviewer:main`.
+  - CronJob `autodeploy` trong cụm (2 phút/lần) kéo image mới về và đổi pod.
+  - Job `verify` xanh nghĩa là bản mới đã thật sự chạy.
+  - PR chỉ chạy `check`.
+- **Cấu hình**: Secret `apps/mdviewer-env`, gồm cả `ASSISTANT_API_KEY`. Danh sách biến xem `.env.production.example`.
+- **Database**: MySQL `apps/mysql`, database `mdviewer`, backup lên R2 mỗi 6 giờ. Migration (`backend/src/migrations`) tự chạy khi app khởi động và phải tương thích ngược, vì pod cũ còn phục vụ trong lúc pod mới migrate. Khi đổi entity thì tạo migration mới:
   ```bash
   cd backend && DB_NAME=<db trống hoặc khớp schema hiện tại> npm run migration:generate -- src/migrations/<TenMigration>
   ```
-- **Xem log / khởi động lại**: `pm2 logs mdviewer`, `pm2 restart mdviewer`.
-- **Frontend ở máy + API production**: copy `frontend/.env.example` thành `frontend/.env`, đặt `VITE_API_URL=https://apimdviewer.thangvu.io.vn` rồi `cd frontend && npm run dev` (gọi thẳng API production), mở http://localhost:5173 và đăng nhập GitHub như bình thường — token tự quay về localhost. Cần `ALLOWED_ORIGINS=http://localhost:5173` trong `.env` trên server (CORS, và là nơi duy nhất ngoài site được nhận token đăng nhập). Đây là dữ liệu thật: sửa/xoá ở máy là sửa/xoá trên production.
+- **Log / khởi động lại**: `kubectl -n apps logs -f deploy/mdviewer`, `kubectl -n apps rollout restart deploy/mdviewer`.
+
+Chi tiết (sơ đồ, rollback, sửa biến môi trường, vào DB, backup/khôi phục, domain, frontend ở máy với API production): **[docs/DEPLOY.md](docs/DEPLOY.md)**.
