@@ -5,7 +5,8 @@ import { Brackets, IsNull, Not, QueryFailedError, Repository } from 'typeorm';
 import { ProjectsService } from '../projects/projects.service';
 import { Doc } from './doc.entity';
 import { CreateDocDto, ListDocsQuery, SharingDto, UpdateDocDto } from './docs.dto';
-import { countWords, deriveTitle, makeExcerpt, slugify, topicsOf } from './markdown.util';
+import { countWords, deriveTitle, makeExcerpt, slugify } from './markdown.util';
+import { publicFields, redactedContent, redactMarkdown } from './redact';
 
 const SUMMARY_COLUMNS = [
   'id',
@@ -20,11 +21,11 @@ const SUMMARY_COLUMNS = [
   'allowComments',
 ] as const;
 
-/** Fields computed from the content on every save (summary, topics, length). */
-export const derived = (content: string) => ({
+/** Fields computed on every save: summary and length, and what the blog shows (sensitive parts hidden). */
+export const derived = (title: string, content: string) => ({
   excerpt: makeExcerpt(content),
-  topics: topicsOf(content),
   wordCount: countWords(content),
+  ...publicFields(title, content),
 });
 
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (c) => '\\' + c);
@@ -77,13 +78,14 @@ export class DocsService {
   async create(ownerId: string, dto: CreateDocDto) {
     if (dto.projectId) await this.projects.get(ownerId, dto.projectId);
     const now = new Date();
+    const title = dto.title || deriveTitle(dto.content);
     return this.docs.save(
       this.docs.create({
         ownerId,
         projectId: dto.projectId ?? null,
-        title: dto.title || deriveTitle(dto.content),
+        title,
         content: dto.content,
-        ...derived(dto.content),
+        ...derived(title, dto.content),
         updatedAt: now,
         lastOpenedAt: now,
       }),
@@ -97,11 +99,11 @@ export class DocsService {
     // Write only the fields an edit changes. Saving the whole loaded entity would write back stale
     // sharing state (e.g. re-publish a doc that was unpublished while it was being edited).
     const patch: Partial<Doc> = {};
-    if (dto.content !== undefined) {
-      patch.content = dto.content;
-      Object.assign(patch, derived(dto.content));
-    }
+    if (dto.content !== undefined) patch.content = dto.content;
     if (dto.title !== undefined) patch.title = dto.title || deriveTitle(dto.content ?? doc.content);
+    if (patch.content !== undefined || patch.title !== undefined) {
+      Object.assign(patch, derived(patch.title ?? doc.title, patch.content ?? doc.content));
+    }
     if (dto.projectId !== undefined) patch.projectId = dto.projectId;
     patch.updatedAt = patch.lastOpenedAt = new Date();
     await this.docs.update({ id, ownerId }, patch);
@@ -117,7 +119,8 @@ export class DocsService {
       // First publish: assign a slug only if none exists yet, so concurrent publishes agree on one link.
       // Random suffix keeps slugs unique and unguessable from the title alone; retry on the rare clash.
       for (let attempt = 0; !doc.slug; attempt++) {
-        const slug = `${slugify(doc.title)}-${randomBytes(4).toString('hex').slice(0, 6)}`;
+        // From the public title: a link must not carry what the page hides.
+        const slug = `${slugify(doc.publicTitle || 'doc')}-${randomBytes(4).toString('hex').slice(0, 6)}`;
         try {
           await this.docs.update({ id, ownerId, slug: IsNull() }, { slug });
           break;
@@ -132,7 +135,10 @@ export class DocsService {
     return this.find(ownerId, id);
   }
 
-  /** A doc the user may read: their own, or anyone's public one. 404 otherwise. */
+  /**
+   * A doc the user may read: their own, or anyone's public one — then as the public sees it, with
+   * sensitive parts hidden (it goes to the reading assistant). 404 otherwise.
+   */
   async findReadable(userId: string, id: string) {
     const doc = await this.docs.findOne({
       where: [
@@ -141,7 +147,20 @@ export class DocsService {
       ],
     });
     if (!doc) throw new NotFoundException('Document not found');
-    return doc;
+    if (doc.ownerId === userId) return doc;
+    return {
+      ...doc,
+      title: doc.publicTitle,
+      excerpt: doc.publicExcerpt,
+      content: redactedContent(`${doc.id}:${doc.updatedAt.getTime()}`, doc.content),
+    };
+  }
+
+  /** What publishing hides from readers: secrets, personal data and the parts marked private. */
+  async sensitive(ownerId: string, id: string) {
+    const doc = await this.find(ownerId, id);
+    const { findings } = redactMarkdown(doc.content);
+    return { title: doc.publicTitle, findings };
   }
 
   async remove(ownerId: string, id: string) {

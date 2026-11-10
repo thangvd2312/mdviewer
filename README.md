@@ -91,6 +91,12 @@ Trợ lý gọi bất kỳ endpoint nào tương thích OpenAI Chat Completions.
   - `/u/<login>` — trang tác giả: số bài, lượt xem, các bài đã đăng.
   - Người đã đăng nhập dùng cùng giao diện blog, có thêm nút *My notes* và trợ lý AI. Link cũ `/explore` và `/s/<slug>` được chuyển hướng 301 sang link mới.
 - **Publish**: trong tài liệu bấm **Share** → bật *Public on the web*. Slug lấy từ tiêu đề (bỏ dấu) kèm 6 ký tự ngẫu nhiên; gỡ public rồi public lại vẫn giữ link cũ. Mỗi bài tự có mô tả (đoạn văn mở đầu), chủ đề (các tiêu đề `##`, bỏ số thứ tự) và thời gian đọc, tính lại mỗi lần lưu. Sticky note và lịch sử chat AI luôn riêng tư.
+- **Che thông tin nhạy cảm** (chỉ ở bản public, bản gốc của tác giả giữ nguyên): trang bài, Explore, tìm kiếm, link preview và trợ lý AI của người đọc khác chỉ thấy `***` thay cho:
+  - bí mật: mật khẩu (`DB_PASSWORD=…`, `"apiKey": "…"`, `--password …`, "mật khẩu: …", "pass … là …"), token/API key có dạng nhận ra được (GitHub, OpenAI, Anthropic, AWS, Google, Stripe, Slack, Cloudflare, JWT, `Bearer …`, `vmd_…`…), private key, mật khẩu trong URL (`mysql://user:***@host`), tham số bí mật trên URL (`?access_token=…`);
+  - dữ liệu cá nhân: email, số điện thoại (VN và quốc tế có `+`), địa chỉ IPv4/IPv6 (trừ `127.*`, `0.0.0.0`, DNS công cộng, dải dùng làm ví dụ), số thẻ (kiểm Luhn), số CCCD/CMND/hộ chiếu/tài khoản ngân hàng/mã số thuế khi có nhãn đi kèm;
+  - phần tác giả tự đánh dấu: `||chữ||` → `***`; `<!-- private -->…<!-- /private -->` → bỏ hẳn (thiếu thẻ đóng thì ẩn tới cuối bài).
+
+  Tiêu đề, mô tả, chủ đề và slug lấy từ bản đã che; tìm kiếm trên blog cũng chỉ chạy trên bản này, nên không dò ngược được nội dung bị che. Hộp thoại Share liệt kê trước những gì sẽ bị che (`GET /api/docs/:id/sensitive`). Phát hiện dựa trên mẫu nên không bắt được mọi thứ: mật khẩu viết trơn giữa câu không có nhãn thì phải tự đánh dấu.
 - **Link preview**: server chèn `<title>` và thẻ Open Graph cho `/blog`, `/blog/<slug>` và `/u/<login>`, nên dán link vào Messenger/Zalo/Slack hiện tiêu đề và mô tả.
 - **Bình luận** (trả lời 1 cấp): người đăng nhập bình luận bằng tên GitHub; người chưa đăng nhập bình luận ẩn danh (tên tuỳ chọn). Mỗi bình luận lưu IP (lấy từ `CF-Connecting-IP` của Cloudflare Tunnel) và thiết bị; không bao giờ hiện công khai, có dòng thông báo cho người bình luận. Khách sửa/xoá được bình luận của mình trong 24 giờ (bí mật lưu trong trình duyệt, server chỉ giữ hash). Bình luận mới nhất lên đầu, tải 20 luồng mỗi lần, mỗi luồng 10 câu trả lời đầu + *Show more replies*.
 - **Chống spam**: khách tối đa 5 bình luận/10 phút và 30/ngày theo IP, người đăng nhập 10/100 theo tài khoản (giới hạn trong bộ nhớ, xoá bình luận không được trả lại lượt; sửa bình luận cũng tính); chặn bình luận trùng nội dung trong 24 giờ; bẫy bot (ô ẩn + gửi quá nhanh); tối đa 2 link (khách) / 5 link (người đăng nhập); chỉ nhận JSON và đúng `Origin` để trang web khác không thể bắt trình duyệt người dùng gửi bình luận hộ.
@@ -160,6 +166,7 @@ Tất cả route (trừ `auth/github*`) cần header `Authorization: Bearer <tok
 | GET | `/api/assistant/conversations` | `?page=&docId=&projectId=&limit=` → các cuộc trò chuyện đã lưu, mới nhất trước |
 | GET | `/api/assistant/conversations/:id` | Cuộc trò chuyện kèm toàn bộ tin nhắn |
 | PUT | `/api/docs/:id/sharing` | `{ public?, allowComments? }` — publish / gỡ public, bật/tắt bình luận |
+| GET | `/api/docs/:id/sensitive` | `{ title, findings: [{ kind, value }] }` — những gì người đọc sẽ không thấy khi bài public |
 | GET | `/api/public/docs` | Bài trên blog: `?q=&sort=latest\|popular&author=&topic=&offset=&limit=` (không cần đăng nhập) |
 | GET | `/api/public/authors/:login` | Trang tác giả: tên, avatar, số bài, tổng lượt xem |
 | GET | `/api/public/topics` | Các chủ đề phổ biến trên blog |

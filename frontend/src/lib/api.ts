@@ -85,6 +85,25 @@ export interface ApiTokenInfo {
   lastUsedAt: string | null
 }
 
+export type SensitiveKind =
+  | 'secret'
+  | 'token'
+  | 'private-key'
+  | 'email'
+  | 'phone'
+  | 'ip'
+  | 'card'
+  | 'id-number'
+  | 'marked'
+  | 'hidden-block'
+
+/** What readers won't see once the doc is public. */
+export interface SensitiveReport {
+  /** The title readers see. */
+  title: string
+  findings: { kind: SensitiveKind; value: string }[]
+}
+
 export interface SharingInput {
   public?: boolean
   allowComments?: boolean
@@ -395,6 +414,7 @@ export const api = {
     update: (id: string, input: DocInput) => request<Doc>('PATCH', `/docs/${id}`, input),
     remove: (id: string) => request<void>('DELETE', `/docs/${id}`),
     setSharing: (id: string, input: SharingInput) => request<Doc>('PUT', `/docs/${id}/sharing`, input),
+    sensitive: (id: string) => request<SensitiveReport>('GET', `/docs/${id}/sensitive`),
   },
   review: {
     summary: () => request<ReviewSummary>('GET', '/review'),

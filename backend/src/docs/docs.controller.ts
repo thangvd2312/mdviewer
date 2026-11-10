@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { DocSummaryDto } from './docs.responses.dto';
+import { DocSummaryDto, SensitiveReportDto } from './docs.responses.dto';
 import { AuthGuard, AuthUser } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { CreateDocDto, ListDocsQuery, SharingDto, UpdateDocDto } from './docs.dto';
@@ -35,6 +35,15 @@ export class DocsController {
   @Patch(':id')
   update(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateDocDto) {
     return this.docs.update(user.id, id, dto);
+  }
+
+  /**
+   * What readers won't see once it's public: secrets, personal data (emails, phone numbers, IP
+   * addresses, card and ID numbers) and the parts marked private. Shown before publishing.
+   */
+  @Get(':id/sensitive')
+  sensitive(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string): Promise<SensitiveReportDto> {
+    return this.docs.sensitive(user.id, id);
   }
 
   /** Publish / unpublish the doc and turn comments on or off. */

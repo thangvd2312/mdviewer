@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
 import { Doc } from '../docs/doc.entity';
+import { redactedContent } from '../docs/redact';
 import { User } from '../users/user.entity';
 import { Comment } from './comment.entity';
 import { ExploreQuery } from './public.dto';
@@ -53,8 +54,9 @@ export class PublicDocsService {
       .innerJoin('d.owner', 'u')
       .select([
         'd.slug AS slug',
-        'd.title AS title',
-        'd.excerpt AS excerpt',
+        // The copies with sensitive parts hidden, here and in search: the original text never leaves.
+        'd.publicTitle AS title',
+        'd.publicExcerpt AS excerpt',
         'd.publishedAt AS publishedAt',
         'd.updatedAt AS updatedAt',
         'd.viewCount AS viewCount',
@@ -78,7 +80,7 @@ export class PublicDocsService {
     if (query.q) {
       const like = `%${escapeLike(query.q)}%`;
       qb.andWhere(
-        new Brackets((w) => w.where('d.title LIKE :like', { like }).orWhere('d.excerpt LIKE :like', { like })),
+        new Brackets((w) => w.where('d.publicTitle LIKE :like', { like }).orWhere('d.publicExcerpt LIKE :like', { like })),
       );
     }
     if (query.author) qb.andWhere('u.githubLogin = :author', { author: query.author });
@@ -162,9 +164,10 @@ export class PublicDocsService {
     return {
       id: doc.id,
       slug: doc.slug!,
-      title: doc.title,
-      excerpt: doc.excerpt,
-      content: doc.content,
+      // As the public sees it (the owner too, here): sensitive parts hidden.
+      title: doc.publicTitle,
+      excerpt: doc.publicExcerpt,
+      content: redactedContent(`${doc.id}:${doc.updatedAt.getTime()}`, doc.content),
       publishedAt: doc.publishedAt.toISOString(),
       updatedAt: doc.updatedAt.toISOString(),
       viewCount: doc.viewCount,
@@ -184,16 +187,16 @@ export class PublicDocsService {
       relations: { owner: true },
       select: {
         id: true,
-        title: true,
-        excerpt: true,
+        publicTitle: true,
+        publicExcerpt: true,
         publishedAt: true,
         owner: { name: true },
       },
     });
     if (!doc?.publishedAt) return null;
     return {
-      title: doc.title,
-      description: doc.excerpt,
+      title: doc.publicTitle,
+      description: doc.publicExcerpt,
       author: doc.owner.name,
     };
   }

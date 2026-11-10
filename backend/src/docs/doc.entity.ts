@@ -76,11 +76,21 @@ export class Doc {
   @Column({ default: true })
   allowComments: boolean;
 
+  /** The title as the blog shows it (sensitive parts hidden), derived on save. */
+  @ApiHideProperty()
+  @Column({ type: 'varchar', length: 300, default: '' })
+  publicTitle: string;
+
+  /** The summary as the blog shows and searches it (sensitive parts hidden), derived on save. */
+  @ApiHideProperty()
+  @Column({ type: 'varchar', length: 400, default: '' })
+  publicExcerpt: string;
+
   /** Words of prose (for reading time), derived from content on save. */
   @Column({ type: 'int', unsigned: true, default: 0 })
   wordCount: number;
 
-  /** Main section headings (what the doc covers), derived from content on save; shown on Explore. */
+  /** Main section headings (what the doc covers, sensitive parts hidden), derived from content on save; shown on Explore. */
   @Column({ type: 'json', nullable: true })
   topics: string[] | null;
 
