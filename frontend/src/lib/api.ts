@@ -362,7 +362,7 @@ export type ChatStreamEvent =
 
 /**
  * Where the API lives. Empty (production): the same site, `/api`. Set VITE_API_URL to call another one,
- * e.g. `npm run dev:prod` runs the local app against https://apimdviewer.thangvu.io.vn.
+ * e.g. https://apimdviewer.thangvu.io.vn in frontend/.env runs the local app against production.
  */
 export const API_ORIGIN = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
 
