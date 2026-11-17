@@ -25,6 +25,7 @@ import type { Doc, Project } from '../lib/api'
 import { timeAgo } from '../lib/format'
 import { downloadMarkdown, readingStats, startsWithH1 } from '../lib/markdown'
 import { useAssistant, usePageAssistant } from '../lib/assistant'
+import { projectCrumbs } from '../lib/projects'
 import { useAnnotationMutations, useAnnotations, useDeleteDoc, useDoc, useProjects, useSaveDoc } from '../lib/queries'
 import { useStoredState } from '../lib/storage'
 import { useUI } from '../lib/ui'
@@ -141,7 +142,7 @@ export function DocPage() {
     <>
       <TopBar
         crumbs={[
-          project ? { label: `${project.icon} ${project.name}`, to: `/p/${project.id}` } : { label: 'Notes' },
+          ...projectCrumbs(projects, project),
           { label: doc.title },
         ]}
         actions={

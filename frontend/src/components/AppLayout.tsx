@@ -38,11 +38,14 @@ export function AppLayout() {
 export interface Crumb {
   label: ReactNode
   to?: string
+  /** Left out on phones (e.g. the outer projects of a nested one), to leave room for the rest. */
+  hideOnMobile?: boolean
 }
 
 /** Page header: sidebar toggle (when collapsed), breadcrumbs and page actions. */
 export function TopBar({ crumbs, actions }: { crumbs: Crumb[]; actions?: ReactNode }) {
   const { sidebarOpen, setSidebarOpen } = useUI()
+  const firstOnMobile = crumbs.findIndex((c) => !c.hideOnMobile)
   return (
     <header className="flex h-12 shrink-0 items-center gap-1 px-3">
       {!sidebarOpen && (
@@ -53,13 +56,23 @@ export function TopBar({ crumbs, actions }: { crumbs: Crumb[]; actions?: ReactNo
       <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1 pl-1 text-[13.5px]">
         {crumbs.map((c, i) => (
           <Fragment key={i}>
-            {i > 0 && <ChevronRight className="size-3.5 shrink-0 text-ink-faint" />}
+            {i > 0 && (
+              <ChevronRight
+                className={clsx('size-3.5 shrink-0 text-ink-faint', (c.hideOnMobile || i <= firstOnMobile) && 'max-sm:hidden')}
+              />
+            )}
             {c.to ? (
-              <Link to={c.to} className="max-w-56 shrink-0 truncate rounded-md px-1 text-ink-muted hover:text-ink">
+              <Link
+                to={c.to}
+                className={clsx(
+                  'max-w-56 min-w-0 shrink-[0.5] truncate rounded-md px-1 text-ink-muted hover:text-ink',
+                  c.hideOnMobile && 'max-sm:hidden',
+                )}
+              >
                 {c.label}
               </Link>
             ) : (
-              <span className="truncate px-1 font-medium">{c.label}</span>
+              <span className={clsx('truncate px-1 font-medium', c.hideOnMobile && 'max-sm:hidden')}>{c.label}</span>
             )}
           </Fragment>
         ))}

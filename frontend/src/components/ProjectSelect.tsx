@@ -1,4 +1,5 @@
 import { ChevronDown } from 'lucide-react'
+import { flattenTree } from '../lib/projects'
 import { useProjects } from '../lib/queries'
 
 /** Compact native select for choosing a project (or none). */
@@ -13,8 +14,9 @@ export function ProjectSelect({ value, onChange }: { value: string | null; onCha
         className="h-full max-w-48 cursor-pointer appearance-none truncate bg-transparent pr-7 pl-2.5 font-medium outline-none"
       >
         <option value="">No project</option>
-        {projects.map((p) => (
+        {flattenTree(projects).map(({ project: p, depth }) => (
           <option key={p.id} value={p.id}>
+            {'\u2003'.repeat(depth)}
             {p.icon} {p.name}
           </option>
         ))}

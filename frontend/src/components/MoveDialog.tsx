@@ -1,4 +1,5 @@
 import { Check, FileText } from 'lucide-react'
+import { flattenTree } from '../lib/projects'
 import { useProjects } from '../lib/queries'
 import { Modal } from './ui'
 
@@ -14,7 +15,10 @@ export function MoveDialog({
   onMove: (projectId: string | null) => void
 }) {
   const { data: projects = [] } = useProjects()
-  const options = [{ id: null, name: 'No project', icon: null }, ...projects]
+  const options = [
+    { id: null, name: 'No project', icon: null, depth: 0 },
+    ...flattenTree(projects).map(({ project, depth }) => ({ ...project, depth })),
+  ]
 
   return (
     <Modal open={open} onClose={onClose} title="Move to…">
@@ -25,6 +29,7 @@ export function MoveDialog({
             type="button"
             onClick={() => onMove(p.id)}
             className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13.5px] hover:bg-hover"
+            style={{ paddingLeft: 12 + p.depth * 18 }}
           >
             <span className="grid w-5 place-items-center">
               {p.icon ?? <FileText className="size-4 text-ink-muted" />}

@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { ArrowDown, ArrowUp, ArrowUpDown, Check, Ellipsis, FilePlus2, Globe, Library, Pencil, Trash2, Upload } from 'lucide-react'
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, Ellipsis, FilePlus2, FolderPlus, Globe, Library, Pencil, Trash2, Upload } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { TopBar } from '../components/AppLayout'
@@ -10,6 +10,7 @@ import { Button, buttonClass, ConfirmDialog, IconButton, Menu, MenuItem } from '
 import { usePageAssistant } from '../lib/assistant'
 import { timeAgo } from '../lib/format'
 import type { DocSummary } from '../lib/api'
+import { ancestorsOf, childrenOf, MAX_PROJECT_DEPTH, projectCrumbs, subtreeIds } from '../lib/projects'
 import { projectOrder, useDeleteProject, useDocs, useProjects, useReorderDocs } from '../lib/queries'
 import { useUI } from '../lib/ui'
 import { useImportFiles } from '../lib/useImportFiles'
@@ -29,6 +30,7 @@ export function ProjectPage() {
   const [dragging, setDragging] = useState(false)
   const [sharing, setSharing] = useState(false)
   const [reordering, setReordering] = useState(false)
+  const [creatingSub, setCreatingSub] = useState(false)
 
   const project = projects?.find((p) => p.id === id)
   usePageAssistant(project ? { context: { page: 'project', projectId: project.id }, title: `${project.icon} ${project.name}` } : null)
@@ -37,10 +39,21 @@ export function ProjectPage() {
       allDocs.filter((d) => d.projectId === id).sort(projectOrder),
     [allDocs, id],
   )
+  const subs = useMemo(() => (projects && id ? (childrenOf(projects).get(id) ?? []) : []), [projects, id])
+  const docCount = useMemo(() => {
+    const counts = new Map<string, number>()
+    allDocs.forEach((d) => d.projectId && counts.set(d.projectId, (counts.get(d.projectId) ?? 0) + 1))
+    return counts
+  }, [allDocs])
   const lastUpdated = docs.reduce<string | undefined>((max, d) => (!max || d.updatedAt > max ? d.updatedAt : max), undefined)
 
   if (isLoading) return <PageLoading />
   if (!project) return <NotFound what="project" />
+
+  const all = projects ?? []
+  const depth = ancestorsOf(all, project.id).length + 1
+  // Documents in this project and everything inside it (the sub-projects survive a delete, so the warning counts them apart).
+  const subtreeDocs = [...subtreeIds(all, project.id)].reduce((n, pid) => n + (docCount.get(pid) ?? 0), 0)
 
   const remove = async () => {
     await del.mutateAsync(project.id)
@@ -51,7 +64,7 @@ export function ProjectPage() {
   return (
     <>
       <TopBar
-        crumbs={[{ label: `${project.icon} ${project.name}` }]}
+        crumbs={projectCrumbs(all, project).map((c, i, list) => (i === list.length - 1 ? { label: c.label } : c))}
         actions={
           <>
             <input
@@ -83,6 +96,11 @@ export function ProjectPage() {
               <MenuItem icon={<Pencil />} onClick={() => setEditing(true)}>
                 Edit project
               </MenuItem>
+              {depth < MAX_PROJECT_DEPTH && (
+                <MenuItem icon={<FolderPlus />} onClick={() => setCreatingSub(true)}>
+                  New sub-project
+                </MenuItem>
+              )}
               <MenuItem icon={<Trash2 />} danger onClick={() => setConfirmDelete(true)}>
                 Delete project
               </MenuItem>
@@ -113,6 +131,7 @@ export function ProjectPage() {
           {project.description && <p className="mt-1.5 text-[15px] leading-relaxed text-ink-muted">{project.description}</p>}
           <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-ink-faint">
             <span>
+              {subs.length > 0 && `${subs.length} ${subs.length === 1 ? 'sub-project' : 'sub-projects'} · `}
               {docs.length} {docs.length === 1 ? 'document' : 'documents'}
               {lastUpdated && ` · last updated ${timeAgo(lastUpdated)}`}
             </span>
@@ -125,6 +144,31 @@ export function ProjectPage() {
               </Link>
             )}
           </div>
+
+          {subs.length > 0 && (
+            <div className="mt-8 grid gap-2 sm:grid-cols-2">
+              {subs.map((p) => {
+                const count = docCount.get(p.id) ?? 0
+                const inner = childrenOf(all).get(p.id)?.length ?? 0
+                return (
+                  <Link
+                    key={p.id}
+                    to={`/p/${p.id}`}
+                    className="flex items-center gap-2.5 rounded-xl border border-line px-3 py-2.5 transition hover:border-ink-faint/50 hover:shadow-sm"
+                  >
+                    <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-raised text-[16px]">{p.icon}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-[14px] font-medium">{p.name}</span>
+                      <span className="block text-[12px] text-ink-faint">
+                        {inner > 0 && `${inner} ${inner === 1 ? 'sub-project' : 'sub-projects'} · `}
+                        {count} {count === 1 ? 'document' : 'documents'}
+                      </span>
+                    </span>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
 
           <div className="mt-8 border-t border-line pt-4">
             {docs.length > 1 && (
@@ -140,7 +184,7 @@ export function ProjectPage() {
             ) : (
               docs.map((d) => <DocRow key={d.id} doc={d} time="updated" />)
             )}
-            {docs.length === 0 && (
+            {docs.length === 0 && subs.length === 0 && (
               <div
                 className={clsx(
                   'mt-4 rounded-2xl border border-dashed px-6 py-12 text-center',
@@ -169,6 +213,7 @@ export function ProjectPage() {
       </div>
 
       <ProjectDialog open={editing} onClose={() => setEditing(false)} project={project} />
+      <ProjectDialog open={creatingSub} onClose={() => setCreatingSub(false)} parentId={project.id} />
       <ProjectShareDialog open={sharing} onClose={() => setSharing(false)} project={project} docs={docs} />
       <ConfirmDialog
         open={confirmDelete}
@@ -177,6 +222,13 @@ export function ProjectPage() {
           <>
             “{project.name}” and its {docs.length} {docs.length === 1 ? 'document' : 'documents'} will be permanently
             deleted. This can’t be undone.
+            {subs.length > 0 && (
+              <>
+                {' '}
+                Its {subs.length} {subs.length === 1 ? 'sub-project' : 'sub-projects'} ({subtreeDocs - docs.length}{' '}
+                {subtreeDocs - docs.length === 1 ? 'document' : 'documents'}) will be kept and moved up a level.
+              </>
+            )}
           </>
         }
         confirmLabel="Delete project"

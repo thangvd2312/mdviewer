@@ -10,6 +10,7 @@ import { Button } from '../components/ui'
 import { usePageAssistant } from '../lib/assistant'
 import { useAuth } from '../lib/auth'
 import { greeting } from '../lib/format'
+import { childrenOf } from '../lib/projects'
 import { useDocs, useProjects, useSaveDoc } from '../lib/queries'
 import { SAMPLE_MARKDOWN } from '../lib/sample'
 import { useImportFiles } from '../lib/useImportFiles'
@@ -34,6 +35,7 @@ export function HomePage() {
     docs.forEach((d) => d.projectId && counts.set(d.projectId, (counts.get(d.projectId) ?? 0) + 1))
     return counts
   }, [docs])
+  const children = useMemo(() => childrenOf(projects), [projects])
 
   const saveDraft = async (content = draft) => {
     const doc = await save.mutateAsync({ content, projectId })
@@ -127,7 +129,7 @@ export function HomePage() {
           <section className="mt-12">
             <h2 className="mb-3 text-[13px] font-medium text-ink-faint">Projects</h2>
             <div className="grid gap-3 sm:grid-cols-2">
-              {projects.map((p) => (
+              {(children.get(null) ?? []).map((p) => (
                 <Link
                   key={p.id}
                   to={`/p/${p.id}`}
@@ -138,6 +140,8 @@ export function HomePage() {
                     <div className="min-w-0">
                       <div className="truncate text-[14px] font-medium">{p.name}</div>
                       <div className="text-[12px] text-ink-faint">
+                        {(children.get(p.id)?.length ?? 0) > 0 &&
+                          `${children.get(p.id)!.length} ${children.get(p.id)!.length === 1 ? 'sub-project' : 'sub-projects'} · `}
                         {docCount.get(p.id) ?? 0} {docCount.get(p.id) === 1 ? 'document' : 'documents'}
                       </div>
                     </div>

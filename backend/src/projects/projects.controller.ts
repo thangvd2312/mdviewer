@@ -30,13 +30,13 @@ export class ProjectsController {
     return this.projects.create(user.id, dto);
   }
 
-  /** Rename it, or change its icon or description. */
+  /** Rename it, change its icon or description, or move it into another project (parentId; null = top level). */
   @Patch(':id')
   update(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateProjectDto) {
     return this.projects.update(user.id, id, dto);
   }
 
-  /** Delete the project and all its documents. */
+  /** Delete the project and its documents; its sub-projects move up to where it was. */
   @Delete(':id')
   @HttpCode(204)
   remove(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {

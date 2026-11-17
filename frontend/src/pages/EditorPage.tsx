@@ -8,6 +8,7 @@ import { ProjectSelect } from '../components/ProjectSelect'
 import { Button, ConfirmDialog } from '../components/ui'
 import type { Doc } from '../lib/api'
 import { deriveTitle, isMarkdownFile } from '../lib/markdown'
+import { projectCrumbs } from '../lib/projects'
 import { useDoc, useProjects, useSaveDoc } from '../lib/queries'
 import { useStoredState } from '../lib/storage'
 import { useUI } from '../lib/ui'
@@ -151,7 +152,7 @@ function Editor({
     <>
       <TopBar
         crumbs={[
-          project ? { label: `${project.icon} ${project.name}`, to: `/p/${project.id}` } : { label: 'Notes' },
+          ...projectCrumbs(projects, project),
           { label: effectiveTitle, to: doc ? `/d/${doc.id}` : undefined },
           { label: doc ? 'Edit' : 'Draft' },
         ]}

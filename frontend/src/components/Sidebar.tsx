@@ -23,9 +23,10 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router'
 import { AgentDialog } from './AgentDialog'
 import { DeleteDocButton, revealOnHover } from './DeleteDocButton'
-import type { DocSummary } from '../lib/api'
+import type { DocSummary, Project } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { initials } from '../lib/format'
+import { ancestorsOf, childrenOf } from '../lib/projects'
 import { useInstallApp } from '../lib/pwa'
 import { projectOrder, useDocs, useProjects, useReviewSummary, useSavedList } from '../lib/queries'
 import { useStoredState } from '../lib/storage'
@@ -67,13 +68,24 @@ export function Sidebar() {
     return { byProject, loose: loose.sort(byTitle), recents: docs.slice(0, 8) }
   }, [docs])
 
-  // Reveal the project that contains the doc being viewed.
+  const children = useMemo(() => childrenOf(projects), [projects])
+
+  // Reveal the doc being viewed (its project and the projects above it), or the project being viewed.
   const activeDocId = location.pathname.match(/^\/d\/([^/]+)/)?.[1]
   const activeProjectId = docs.find((d) => d.id === activeDocId)?.projectId
+  const viewedProjectId = location.pathname.match(/^\/p\/([^/]+)/)?.[1]
+  const reveal = useMemo(
+    () => [
+      ...ancestorsOf(projects, activeProjectId ?? viewedProjectId).map((p) => p.id),
+      ...(activeProjectId ? [activeProjectId] : []),
+    ],
+    [projects, activeProjectId, viewedProjectId],
+  )
   useEffect(() => {
-    if (activeProjectId && !expanded.includes(activeProjectId)) setExpanded((e) => [...e, activeProjectId])
+    const missing = reveal.filter((id) => !expanded.includes(id))
+    if (missing.length) setExpanded((e) => [...e, ...missing])
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeProjectId])
+  }, [reveal.join()])
 
   // Close the drawer after navigating on phones.
   useEffect(() => {
@@ -146,64 +158,16 @@ export function Sidebar() {
           }
         >
           {projects.length === 0 && <Empty>Group related docs into a project.</Empty>}
-          {projects.map((p) => {
-            const open = expanded.includes(p.id)
-            const items = byProject.get(p.id) ?? []
-            return (
-              <div key={p.id}>
-                <div className="group relative flex items-center">
-                  <button
-                    type="button"
-                    aria-label={open ? 'Collapse' : 'Expand'}
-                    onClick={() => toggle(p.id)}
-                    className="absolute left-1 z-10 grid size-6 place-items-center rounded-md text-ink-faint opacity-0 group-hover:opacity-100 hover:bg-surface hover:text-ink"
-                  >
-                    <ChevronRight className={clsx('size-3.5 transition-transform', open && 'rotate-90')} />
-                  </button>
-                  <NavLink
-                    to={`/p/${p.id}`}
-                    onClick={() => !open && toggle(p.id)}
-                    className={(s) => clsx(rowClass(s), 'flex-1 pr-8')}
-                  >
-                    <span className="grid w-4 place-items-center text-[13px] transition-opacity group-hover:opacity-0">
-                      {p.icon === '📁' ? (
-                        open ? (
-                          <FolderOpen className="size-4 text-ink-muted" />
-                        ) : (
-                          <FolderClosed className="size-4 text-ink-muted" />
-                        )
-                      ) : (
-                        p.icon
-                      )}
-                    </span>
-                    <span className="truncate">{p.name}</span>
-                    <span className="ml-auto text-[11.5px] text-ink-faint group-hover:opacity-0">
-                      {items.length || ''}
-                    </span>
-                  </NavLink>
-                  <Link
-                    to={`/new?project=${p.id}`}
-                    aria-label={`New document in ${p.name}`}
-                    title="New document in this project"
-                    className={clsx(
-                      'absolute right-1 grid size-6 place-items-center rounded-md text-ink-faint hover:bg-surface hover:text-ink',
-                      revealOnHover,
-                    )}
-                  >
-                    <Plus className="size-3.5" />
-                  </Link>
-                </div>
-                {open && (
-                  <div className="mb-1 ml-[15px] border-l border-line pl-2">
-                    {items.map((d) => (
-                      <DocLink key={d.id} doc={d} />
-                    ))}
-                    {items.length === 0 && <Empty>No documents</Empty>}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+          {(children.get(null) ?? []).map((p) => (
+            <ProjectNode
+              key={p.id}
+              project={p}
+              childrenOf={children}
+              byProject={byProject}
+              expanded={expanded}
+              toggle={toggle}
+            />
+          ))}
         </Section>
 
         <Section
@@ -272,6 +236,86 @@ export function Sidebar() {
 
       <ProjectDialog open={creatingProject} onClose={() => setCreatingProject(false)} />
       <AgentDialog open={connectingAgent} onClose={() => setConnectingAgent(false)} />
+    </div>
+  )
+}
+
+function ProjectNode({
+  project: p,
+  childrenOf,
+  byProject,
+  expanded,
+  toggle,
+}: {
+  project: Project
+  childrenOf: Map<string | null, Project[]>
+  byProject: Map<string, DocSummary[]>
+  expanded: string[]
+  toggle: (id: string) => void
+}) {
+  const open = expanded.includes(p.id)
+  const subs = childrenOf.get(p.id) ?? []
+  const items = byProject.get(p.id) ?? []
+  return (
+    <div>
+      <div className="group relative flex items-center">
+        <button
+          type="button"
+          aria-label={open ? 'Collapse' : 'Expand'}
+          onClick={() => toggle(p.id)}
+          className="absolute left-1 z-10 grid size-6 place-items-center rounded-md text-ink-faint opacity-0 group-hover:opacity-100 hover:bg-surface hover:text-ink"
+        >
+          <ChevronRight className={clsx('size-3.5 transition-transform', open && 'rotate-90')} />
+        </button>
+        <NavLink
+          to={`/p/${p.id}`}
+          onClick={() => !open && toggle(p.id)}
+          className={(s) => clsx(rowClass(s), 'flex-1 pr-8')}
+        >
+          <span className="grid w-4 place-items-center text-[13px] transition-opacity group-hover:opacity-0">
+            {p.icon === '📁' ? (
+              open ? (
+                <FolderOpen className="size-4 text-ink-muted" />
+              ) : (
+                <FolderClosed className="size-4 text-ink-muted" />
+              )
+            ) : (
+              p.icon
+            )}
+          </span>
+          <span className="truncate">{p.name}</span>
+          <span className="ml-auto text-[11.5px] text-ink-faint group-hover:opacity-0">{items.length || ''}</span>
+        </NavLink>
+        <Link
+          to={`/new?project=${p.id}`}
+          aria-label={`New document in ${p.name}`}
+          title="New document in this project"
+          className={clsx(
+            'absolute right-1 grid size-6 place-items-center rounded-md text-ink-faint hover:bg-surface hover:text-ink',
+            revealOnHover,
+          )}
+        >
+          <Plus className="size-3.5" />
+        </Link>
+      </div>
+      {open && (
+        <div className="mb-1 ml-[15px] border-l border-line pl-2">
+          {subs.map((c) => (
+            <ProjectNode
+              key={c.id}
+              project={c}
+              childrenOf={childrenOf}
+              byProject={byProject}
+              expanded={expanded}
+              toggle={toggle}
+            />
+          ))}
+          {items.map((d) => (
+            <DocLink key={d.id} doc={d} />
+          ))}
+          {items.length === 0 && subs.length === 0 && <Empty>No documents</Empty>}
+        </div>
+      )}
     </div>
   )
 }

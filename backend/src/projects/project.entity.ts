@@ -38,6 +38,16 @@ export class Project {
   @Column({ length: 16, default: '📁' })
   icon: string;
 
+  /** The project it sits in (a sub-project); null = top level. */
+  @Column({ type: 'varchar', length: 36, nullable: true })
+  parentId: string | null;
+
+  @ApiHideProperty()
+
+  @ManyToOne(() => Project, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'parentId' })
+  parent: Relation<Project> | null;
+
   /**
    * Public address of the series (/blog/series/<slug>), made the first time the project is published
    * and kept after unpublishing so the link stays the same. null = never published.

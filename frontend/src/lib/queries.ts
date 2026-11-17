@@ -271,7 +271,12 @@ export function useDeleteProject() {
   return useMutation({
     mutationFn: api.projects.remove,
     onSuccess: (_, id) => {
-      queryClient.setQueryData<Project[]>(keys.projects, (list) => list?.filter((p) => p.id !== id))
+      // Its sub-projects moved up to where it was.
+      queryClient.setQueryData<Project[]>(keys.projects, (list) => {
+        const gone = list?.find((p) => p.id === id)
+        return list?.filter((p) => p.id !== id).map((p) => (p.parentId === id ? { ...p, parentId: gone?.parentId ?? null } : p))
+      })
+      queryClient.invalidateQueries({ queryKey: keys.projects })
       // Its docs were deleted with it.
       queryClient.invalidateQueries({ queryKey: keys.docs })
     },

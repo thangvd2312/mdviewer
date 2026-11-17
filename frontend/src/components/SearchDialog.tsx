@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { FileText, Search } from 'lucide-react'
 import { useDeferredValue, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
+import { projectPath } from '../lib/projects'
 import { useDocs, useProjects, useSearchDocs } from '../lib/queries'
 import { useUI } from '../lib/ui'
 import { Modal, Spinner } from './ui'
@@ -78,7 +79,7 @@ function SearchPanel({ close }: { close: () => void }) {
                   <span className="truncate text-[13.5px] font-medium">{d.title}</span>
                   {project && (
                     <span className="shrink-0 text-[12px] text-ink-faint">
-                      {project.icon} {project.name}
+                      {project.icon} {projectPath(projects, project)}
                     </span>
                   )}
                 </span>

@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 
 const trim = ({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value);
 
@@ -21,6 +21,11 @@ export class CreateProjectDto {
   @MinLength(1)
   @MaxLength(16)
   icon?: string;
+
+  /** The project to put it in (a sub-project); null or left out = top level. */
+  @IsOptional()
+  @IsUUID()
+  parentId?: string | null;
 }
 
 export class UpdateProjectDto {
@@ -42,4 +47,9 @@ export class UpdateProjectDto {
   @MinLength(1)
   @MaxLength(16)
   icon?: string;
+
+  /** The project to put it in (a sub-project); null = move to the top level, left out = unchanged. */
+  @IsOptional()
+  @IsUUID()
+  parentId?: string | null;
 }

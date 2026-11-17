@@ -56,6 +56,7 @@ Trợ lý gọi bất kỳ endpoint nào tương thích OpenAI Chat Completions.
 
 - **Đăng nhập bằng GitHub** (OAuth, có kiểm tra `state` chống CSRF). Lần đầu đăng nhập sẽ tự tạo tài khoản. Nếu email GitHub đã xác minh trùng với một tài khoản cũ thì tự liên kết vào tài khoản đó.
 - **Project**: gom các tài liệu liên quan, có icon, mô tả, import nhiều file `.md` một lần (kéo thả hoặc nút Import).
+  - **Project con**: project có thể nằm trong project khác, tối đa 5 tầng (vd. `AWS › ECS`). Tạo bằng *New sub-project* trong menu ⋯ của project, hoặc chuyển chỗ bằng ô *Inside* khi sửa project. Sidebar hiện dạng cây, breadcrumb hiện đủ đường dẫn. Xoá một project thì xoá tài liệu của chính nó; các project con (kèm tài liệu) được giữ lại và đẩy lên một tầng.
 - **Notes**: tài liệu đứng riêng, không thuộc project nào. Có thể chuyển qua lại giữa project và note bất cứ lúc nào.
 - **Paste nhanh** ở trang chủ: dán xong bấm *Save & view* (⌘↵) để lưu ngay, hoặc *Edit first* để chỉnh trước khi lưu.
 - **Editor** có 3 chế độ Write / Split / Preview, xem trước trực tiếp, kéo thả file, Tab thụt lề, ⌘S để lưu, cảnh báo khi rời trang mà chưa lưu.
@@ -124,7 +125,7 @@ viewmd có sẵn một MCP server (streamable HTTP) tại `https://<site>/api/mc
    - Claude Code: `claude mcp add --transport http viewmd https://<site>/api/mcp --header "Authorization: Bearer <token>"`
    - Codex: `export VIEWMD_TOKEN=<token>` rồi `codex mcp add viewmd --url https://<site>/api/mcp --bearer-token-env-var VIEWMD_TOKEN`
    - Client khác: `{"mcpServers":{"viewmd":{"url":"https://<site>/api/mcp","headers":{"Authorization":"Bearer <token>"}}}}`
-3. Tool: `save_note` (có thể kèm tên project — chưa có thì tạo), `append_to_note`, `update_note`, `search_notes`, `read_note`, `list_recent_notes`, `list_projects`. Agent **không** xoá hay publish được gì. Mỗi token chỉ thấy ghi chú của chủ token; giới hạn 60 lần ghi / 10 phút và 300 request / 5 phút mỗi token.
+3. Tool: `save_note` (có thể kèm tên project hoặc đường dẫn project con như `AWS / ECS` — chưa có thì tạo), `append_to_note`, `update_note`, `search_notes`, `read_note`, `list_recent_notes`, `list_projects`. Agent **không** xoá hay publish được gì. Mỗi token chỉ thấy ghi chú của chủ token; giới hạn 60 lần ghi / 10 phút và 300 request / 5 phút mỗi token.
 
 ### Trang giới thiệu và cài như app (PWA)
 

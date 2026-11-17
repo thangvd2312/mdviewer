@@ -11,6 +11,8 @@ export interface Project {
   name: string
   description: string | null
   icon: string
+  /** The project it sits in (a sub-project); null = top level. */
+  parentId: string | null
   /** Public address of the series /blog/series/<slug> (kept after unpublishing); null = never published. */
   slug: string | null
   /** Set while the project is a series on the blog; null = private. */
@@ -294,6 +296,8 @@ export interface ProjectInput {
   name?: string
   description?: string | null
   icon?: string
+  /** Put it inside another project; null = top level. */
+  parentId?: string | null
 }
 
 export type AnnotationKind = 'note' | 'important' | 'idea' | 'question' | 'todo' | 'definition'

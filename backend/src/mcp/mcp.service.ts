@@ -4,7 +4,7 @@ import { toNodeHandler } from '@modelcontextprotocol/node';
 import { createMcpHandler, McpServer, type CallToolResult } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import { DocsService } from '../docs/docs.service';
-import { ProjectsService } from '../projects/projects.service';
+import { projectPaths, ProjectsService } from '../projects/projects.service';
 import { WriteLimiter } from '../public/write-limits';
 
 const MINUTE = 60_000;
@@ -80,11 +80,11 @@ export class McpService implements OnModuleDestroy {
       {
         title: 'Save a note',
         description:
-          'Save a new Markdown note to the user’s viewmd notebook. Use a clear "# Title" line or pass title. Optionally file it in a project by name (created if it doesn’t exist yet). Returns the note id and link.',
+          'Save a new Markdown note to the user’s viewmd notebook. Use a clear "# Title" line or pass title. Optionally file it in a project by name, or in a sub-project by path like "AWS / ECS" (created if it doesn’t exist yet). Returns the note id and link.',
         inputSchema: z.object({
           content: z.string().min(1).max(CONTENT_MAX).describe('The note, in Markdown.'),
           title: z.string().max(255).optional().describe('Title; defaults to the first heading.'),
-          project: z.string().max(120).optional().describe('Project (folder) name to file it under.'),
+          project: z.string().max(400).optional().describe('Project (folder) to file it under: a name, or a path of nested projects like "AWS / ECS".'),
         }),
       },
       ({ content, title, project }) =>
@@ -172,13 +172,13 @@ export class McpService implements OnModuleDestroy {
       ({ note_id }) =>
         run(false, async ({ userId }) => {
           const doc = await this.docs.findOwned(userId, note_id);
-          const project = doc.projectId ? await this.projects.get(userId, doc.projectId).catch(() => null) : null;
+          const project = doc.projectId ? (await this.projectNames(userId)).get(doc.projectId) : undefined;
           const cut = doc.content.length > READ_MAX;
           return ok(
             [
               `title: ${doc.title}`,
               `id: ${doc.id}`,
-              project ? `project: ${project.name}` : null,
+              project ? `project: ${project}` : null,
               `updated: ${doc.updatedAt.toISOString()}`,
               `link: ${this.noteUrl(doc.id)}`,
               '',
@@ -211,7 +211,7 @@ export class McpService implements OnModuleDestroy {
       'list_projects',
       {
         title: 'List projects',
-        description: 'The user’s projects (folders of notes), to file a new note in the right place.',
+        description: 'The user’s projects (folders of notes, which can be nested: "AWS / ECS" is ECS inside AWS), to file a new note in the right place.',
         inputSchema: z.object({}),
         annotations: { readOnlyHint: true },
       },
@@ -219,24 +219,57 @@ export class McpService implements OnModuleDestroy {
         run(false, async ({ userId }) => {
           const projects = await this.projects.list(userId);
           if (projects.length === 0) return ok('No projects yet (save_note with a project name creates one).');
-          return ok(projects.map((p) => `- ${p.name}${p.description ? ` — ${p.description}` : ''}`).join('\n'));
+          const paths = projectPaths(projects);
+          return ok(
+            projects
+              .map((p) => ({ path: paths.get(p.id)!, description: p.description }))
+              .sort((a, b) => a.path.localeCompare(b.path))
+              .map((p) => `- ${p.path}${p.description ? ` — ${p.description}` : ''}`)
+              .join('\n'),
+          );
         }),
     );
 
     return server;
   }
 
-  /** Project id by name (case-insensitive), creating the project when it doesn't exist. */
+  /**
+   * Project id by name or by path ("AWS / ECS"), case-insensitive, creating the missing projects. A name matches
+   * a project at any level, preferring a top-level one. A slash makes a path when it has spaces around it or
+   * the part before it is an existing top-level project; otherwise it's part of the name ("CI/CD").
+   */
   private async projectId(userId: string, name: string) {
-    const existing = (await this.projects.list(userId)).find((p) => p.name.toLowerCase() === name.toLowerCase());
-    return existing ? existing.id : (await this.projects.create(userId, { name })).id;
+    const all = await this.projects.list(userId);
+    const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+    const parts = name.split('/').map((s) => s.trim()).filter(Boolean);
+
+    // A project with exactly this name (also one whose name has a slash in it, like "CI/CD").
+    const matches = all.filter((p) => same(p.name, name));
+    const existing = matches.find((p) => !p.parentId) ?? matches[0];
+    if (existing) return existing.id;
+    // "AWS / ECS" or "AWS/ECS" when AWS exists is a path; "CI/CD" is just a name with a slash.
+    const isPath =
+      parts.length > 1 && (/\s\/|\/\s/.test(name) || all.some((p) => !p.parentId && same(p.name, parts[0]!)));
+    if (!isPath) return (await this.projects.create(userId, { name })).id;
+
+    // A path: walk down from the top level, creating what's missing.
+    let parentId: string | null = null;
+    for (const part of parts) {
+      const existing = all.find((p) => p.parentId === parentId && same(p.name, part));
+      parentId = existing ? existing.id : (await this.projects.create(userId, { name: part.slice(0, 120), parentId })).id;
+    }
+    return parentId!;
+  }
+
+  private async projectNames(userId: string) {
+    return projectPaths(await this.projects.list(userId));
   }
 
   private async describeList(
     userId: string,
     docs: { id: string; title: string; excerpt: string; projectId: string | null; updatedAt: Date }[],
   ) {
-    const names = new Map((await this.projects.list(userId)).map((p) => [p.id, p.name]));
+    const names = await this.projectNames(userId);
     return docs
       .map((d) =>
         [
