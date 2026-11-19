@@ -9,6 +9,7 @@ import rehypeSlug from 'rehype-slug'
 import remarkGfm from 'remark-gfm'
 import { stripFrontmatter } from '../lib/markdown'
 import { useUI } from '../lib/ui'
+import { MermaidDiagram } from './MermaidDiagram'
 import { IconButton } from './ui'
 
 const PLAIN = ['mermaid', 'text', 'txt', 'plain', 'plaintext']
@@ -179,13 +180,8 @@ function Mermaid({ code }: { code: string }) {
       </div>
     )
   }
-  return (
-    <div
-      data-annot-skip
-      className="mermaid-card flex min-h-24 justify-center overflow-x-auto rounded-2xl border border-line bg-surface p-5 [&_svg]:h-auto [&_svg]:max-w-full"
-      dangerouslySetInnerHTML={state.svg ? { __html: state.svg } : undefined}
-    />
-  )
+  if (state.svg) return <MermaidDiagram svg={state.svg} />
+  return <div data-annot-skip className="mermaid-card min-h-24 rounded-2xl border border-line bg-surface" />
 }
 
 function heading(Tag: 'h1' | 'h2' | 'h3' | 'h4') {
