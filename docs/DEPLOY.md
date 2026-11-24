@@ -2,7 +2,7 @@
 
 Từ 2026-11-10 mdviewer chạy trên **cụm k3s 3 máy**. Không còn pm2, self-hosted runner hay `~/apps/mdviewer` trên ZBook nữa.
 
-Tài liệu này chỉ viết những gì liên quan tới mdviewer. Phần hạ tầng chung (dựng cụm, Longhorn, failover, cấp quyền, thêm node) nằm trong project **server-manage** trên mdviewer, bắt đầu từ note [00 - Tổng quan](https://mdviewer.thangvu.io.vn/d/c760c125-4068-4241-a898-890dd46961b0).
+Tài liệu này chỉ viết những gì liên quan tới mdviewer. Phần hạ tầng chung (dựng cụm, Longhorn, failover, cấp quyền, thêm node) nằm trong project **server-manage** trên mdviewer, bắt đầu từ note [00 - Tổng quan](https://mdviewer.baibyte.com/d/c760c125-4068-4241-a898-890dd46961b0).
 
 ## 1. Toàn cảnh
 
@@ -23,8 +23,8 @@ Cụm k3s, namespace apps
       → OK: báo status success · lỗi: rollout undo + status failure
 
 Cloudflare ── tunnel "home-k3s" (cloudflared, 2 bản: ZBook + Jerry)
-   mdviewer.thangvu.io.vn     ─┐
-   apimdviewer.thangvu.io.vn  ─┴─► Service mdviewer:4100 ─► pod mdviewer (NestJS: /api, /docs + React build)
+   mdviewer.baibyte.com     ─┐
+   apimdviewer.baibyte.com  ─┴─► Service mdviewer:4100 ─► pod mdviewer (NestJS: /api, /docs + React build)
                                                                │
                                                                └─► Service mysql:3306 ─► StatefulSet mysql (database mdviewer)
                                                                     dữ liệu trên Longhorn, 2 bản sao (ZBook + Jerry)
@@ -205,8 +205,8 @@ Cả hai domain đều trỏ về cùng một Service:
 
 | Hostname | Service |
 |---|---|
-| `mdviewer.thangvu.io.vn` | `http://mdviewer.apps.svc.cluster.local:4100` |
-| `apimdviewer.thangvu.io.vn` | `http://mdviewer.apps.svc.cluster.local:4100` |
+| `mdviewer.baibyte.com` | `http://mdviewer.apps.svc.cluster.local:4100` |
+| `apimdviewer.baibyte.com` | `http://mdviewer.apps.svc.cluster.local:4100` |
 
 ```bash
 cd ~/server-manage/k8s
@@ -220,7 +220,7 @@ cd ~/server-manage/k8s
 
 ## 9. Chạy frontend ở máy với API production
 
-Copy `frontend/.env.example` thành `frontend/.env`, đặt `VITE_API_URL=https://apimdviewer.thangvu.io.vn`, rồi `cd frontend && npm run dev`. Đăng nhập GitHub như bình thường, token tự quay về localhost.
+Copy `frontend/.env.example` thành `frontend/.env`, đặt `VITE_API_URL=https://apimdviewer.baibyte.com`, rồi `cd frontend && npm run dev`. Đăng nhập GitHub như bình thường, token tự quay về localhost.
 
 - Cần `ALLOWED_ORIGINS=http://localhost:5173` trong Secret (mục 5).
 - **Đây là dữ liệu thật**: sửa hay xoá ở máy là sửa hay xoá trên production.

@@ -146,7 +146,7 @@ viewmd có sẵn một MCP server (streamable HTTP) tại `https://<site>/api/mc
 
 ## API
 
-**Tài liệu tương tác (Swagger):** `/docs` — local http://localhost:9000/docs, production https://apimdviewer.thangvu.io.vn/docs (spec OpenAPI ở `/docs/json`). Bấm **Authorize** và dán token (`localStorage.getItem('viewmd.token')` trong console của app) để gọi thử. Schema request/response được plugin `@nestjs/swagger` sinh từ DTO, entity và JSDoc lúc build (`nest-cli.json`); response trả object thường thì khai báo class trong `*.responses.dto.ts` và ghi kiểu trả về cho method của controller (tsc kiểm tra class khớp với dữ liệu thật).
+**Tài liệu tương tác (Swagger):** `/docs` — local http://localhost:9000/docs, production https://apimdviewer.baibyte.com/docs (spec OpenAPI ở `/docs/json`). Bấm **Authorize** và dán token (`localStorage.getItem('viewmd.token')` trong console của app) để gọi thử. Schema request/response được plugin `@nestjs/swagger` sinh từ DTO, entity và JSDoc lúc build (`nest-cli.json`); response trả object thường thì khai báo class trong `*.responses.dto.ts` và ghi kiểu trả về cho method của controller (tsc kiểm tra class khớp với dữ liệu thật).
 
 Tất cả route (trừ `auth/github*`) cần header `Authorization: Bearer <token>`. Mỗi người dùng chỉ thấy được dữ liệu của chính mình.
 
@@ -203,7 +203,7 @@ Nội dung tối đa khoảng 2 triệu ký tự (body JSON giới hạn 5 MB).
 
 ## Deploy (production)
 
-Production chạy tại **https://mdviewer.thangvu.io.vn**, trên cụm **k3s** 3 máy. API còn có domain riêng **https://apimdviewer.thangvu.io.vn** (cùng một app), dùng khi chạy frontend ở máy với dữ liệu thật.
+Production chạy tại **https://mdviewer.baibyte.com**, trên cụm **k3s** 3 máy. API còn có domain riêng **https://apimdviewer.baibyte.com** (cùng một app), dùng khi chạy frontend ở máy với dữ liệu thật.
 
 - **Deploy**: push lên `main` là xong.
   - GitHub Actions chạy `npm run check`, build image `ghcr.io/thangvd2312/mdviewer:main`.

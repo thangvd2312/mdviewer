@@ -5,7 +5,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 export const API_DOCS_PATH = 'docs';
 
 const DESCRIPTION = `
-The API behind [viewmd](https://mdviewer.thangvu.io.vn): Markdown documents, projects, sticky notes,
+The API behind [viewmd](https://mdviewer.baibyte.com): Markdown documents, projects, sticky notes,
 the reading assistant, spaced-repetition review and the public blog.
 
 ## Signing in
