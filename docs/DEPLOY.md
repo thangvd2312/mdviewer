@@ -26,8 +26,8 @@ Cloudflare ── tunnel "home-k3s" (cloudflared, 2 bản: ZBook + Jerry)
    mdviewer.baibyte.com     ─┐
    apimdviewer.baibyte.com  ─┴─► Service mdviewer:4100 ─► pod mdviewer (NestJS: /api, /docs + React build)
                                                                │
-                                                               └─► Service mysql:3306 ─► StatefulSet mysql (database mdviewer)
-                                                                    dữ liệu trên Longhorn, 2 bản sao (ZBook + Jerry)
+                                                               └─► AWS RDS mysql-dev:3306 (database mdviewer, user mdviewer)
+                                                                    ngoài cụm, ap-southeast-1
 ```
 
 | Thành phần | Ở đâu |
@@ -35,7 +35,7 @@ Cloudflare ── tunnel "home-k3s" (cloudflared, 2 bản: ZBook + Jerry)
 | Image | `ghcr.io/thangvd2312/mdviewer` (package private, node kéo bằng Secret `ghcr`) |
 | App | `Deployment apps/mdviewer`, 1 bản, cổng 4100, health `GET /api/health` |
 | Cấu hình (.env) | `Secret apps/mdviewer-env` |
-| Database | `StatefulSet apps/mysql` (MySQL 8.4), database `mdviewer`, dùng chung với kiwi |
+| Database | AWS RDS `mysql-dev.czyg048igqyu.ap-southeast-1.rds.amazonaws.com` (MySQL 8.4), database `mdviewer`, user riêng `mdviewer` (chỉ có quyền trên `mdviewer.*`). Từ 2026-11-25; trước đó là `StatefulSet apps/mysql`, đã gỡ |
 | Backup | `CronJob apps/db-backup`, chạy 0h/6h/12h/18h, lưu lên Cloudflare R2 bằng restic |
 | Domain | Tunnel `home-k3s` (remote-managed), sửa bằng `~/server-manage/k8s/route.sh` |
 | Manifest | `~/server-manage/k8s/*.yaml` trên máy Mac (**chưa có trong git**, xem mục 10) |
@@ -134,7 +134,8 @@ Toàn bộ `.env` production nằm trong **Secret `apps/mdviewer-env`**. Danh s�
 
 | Biến | Giá trị trong k3s |
 |---|---|
-| `DB_HOST` / `DB_PORT` | `mysql.apps.svc.cluster.local` / `3306` |
+| `DB_HOST` / `DB_PORT` | `mysql-dev.czyg048igqyu.ap-southeast-1.rds.amazonaws.com` / `3306` |
+| `DB_NAME` / `DB_USER` | `mdviewer` / `mdviewer` |
 | `HOST` | `0.0.0.0` (cloudflared gọi vào qua Service) |
 | `PORT` | Không đặt. Image mặc định `4100`, khớp với Service và probe |
 | `ASSISTANT_API_KEY` | Nằm ở đây. GitHub secret `ASSISTANT_API_KEY` **không còn được dùng** |
@@ -159,7 +160,7 @@ Giá trị bí mật như API key thì nhập qua `read -s` để không bị l�
 
 Muốn tạo lại toàn bộ Secret từ một file `.env` (bỏ nháy giống `node --env-file`), dùng `~/server-manage/k8s/env2secret.py`:
 ```bash
-python3 ~/server-manage/k8s/env2secret.py mdviewer-env apps DB_HOST=mysql.apps.svc.cluster.local DB_PORT=3306 HOST=0.0.0.0 -PORT \
+python3 ~/server-manage/k8s/env2secret.py mdviewer-env apps DB_HOST=mysql-dev.czyg048igqyu.ap-southeast-1.rds.amazonaws.com DB_PORT=3306 HOST=0.0.0.0 -PORT \
   < mdviewer.env | kubectl apply -f -
 ```
 
@@ -169,16 +170,17 @@ python3 ~/server-manage/k8s/env2secret.py mdviewer-env apps DB_HOST=mysql.apps.s
 kubectl -n apps get pods -l app=mdviewer -o wide         # pod ở máy nào, restart bao nhiêu lần
 kubectl -n apps logs -f deploy/mdviewer                  # log trực tiếp
 kubectl -n apps logs deploy/mdviewer --previous          # log của lần vừa crash
-kubectl -n apps logs deploy/mdviewer -c wait-db          # pod kẹt ở Init: đang chờ MySQL
+kubectl -n apps logs deploy/mdviewer -c wait-db          # pod kẹt ở Init: đang chờ RDS (mạng ra AWS?)
 kubectl -n apps describe pod -l app=mdviewer             # Events: pull image lỗi, OOMKilled, probe fail…
 kubectl -n apps rollout restart deploy/mdviewer          # khởi động lại, không downtime
 
-# MySQL bằng TablePlus/DBeaver: 127.0.0.1:3308, user và mật khẩu lấy từ Secret mdviewer-env (DB_USER, DB_PASSWORD)
-# (3307 ở máy Mac thường đã bị container MySQL local chiếm)
-kubectl -n apps port-forward svc/mysql 3308:3306
+# MySQL bằng TablePlus/DBeaver: nối thẳng mysql-dev.czyg048igqyu.ap-southeast-1.rds.amazonaws.com:3306,
+# user và mật khẩu lấy từ Secret mdviewer-env (DB_USER, DB_PASSWORD). Cần Security Group của RDS cho phép IP của bạn.
 
-# Shell mysql ngay trong pod
-kubectl -n apps exec -it mysql-0 -- sh -c 'MYSQL_PWD=$MYSQL_ROOT_PASSWORD mysql -uroot mdviewer'
+# Shell mysql từ trong cụm (pod tạm, tự xoá khi thoát)
+kubectl -n apps run mysql-client --rm -it --restart=Never --image=mysql:8.4 \
+  --env="MYSQL_PWD=$(kubectl -n apps get secret mdviewer-env -o jsonpath='{.data.DB_PASSWORD}' | base64 -d)" \
+  -- mysql -h mysql-dev.czyg048igqyu.ap-southeast-1.rds.amazonaws.com -umdviewer mdviewer
 ```
 - App **không ghi log cho từng request**, chỉ ghi lúc khởi động, cảnh báo và lỗi. Log trống khi bạn đang click trên trang là bình thường.
 - Pod bị xoá hoặc chuyển sang máy khác thì log cũ mất theo.
@@ -186,7 +188,7 @@ kubectl -n apps exec -it mysql-0 -- sh -c 'MYSQL_PWD=$MYSQL_ROOT_PASSWORD mysql 
 
 ## 7. Backup và khôi phục
 
-- `CronJob db-backup` chạy mỗi 6 tiếng: dump `kiwi`, `mdviewer` (MySQL) và `dautu` (Postgres), rồi đẩy lên R2 bằng restic có mã hoá.
+- `CronJob db-backup` chạy mỗi 6 tiếng: dump `kiwi`, `mdviewer` (MySQL trên RDS, mỗi DB bằng user của chính app) và `dautu` (Postgres trong cụm), rồi đẩy lên R2 bằng restic có mã hoá.
 - Restic giữ 28 bản gần nhất, cộng 14 bản theo ngày, 8 bản theo tuần, 12 bản theo tháng.
 - Chạy tay: `kubectl -n apps create job --from=cronjob/db-backup db-backup-manual-$(date +%s)`.
 - Cách lấy một bản dump ra và khôi phục: xem `~/server-manage/backup/restore-test.sh` và note giai đoạn backup trong project server-manage.
@@ -194,7 +196,9 @@ kubectl -n apps exec -it mysql-0 -- sh -c 'MYSQL_PWD=$MYSQL_ROOT_PASSWORD mysql 
 Khôi phục riêng database mdviewer từ file `mdviewer.sql.gz`. **Nên** tạm `scale --replicas=0` app trước để không có ghi mới chen vào:
 ```bash
 kubectl -n apps scale deploy/mdviewer --replicas=0
-gunzip -c mdviewer.sql.gz | kubectl -n apps exec -i mysql-0 -- sh -c 'MYSQL_PWD=$MYSQL_ROOT_PASSWORD mysql -uroot'
+gunzip -c mdviewer.sql.gz | kubectl -n apps run mysql-restore --rm -i --restart=Never --image=mysql:8.4 \
+  --env="MYSQL_PWD=$(kubectl -n apps get secret mdviewer-env -o jsonpath='{.data.DB_PASSWORD}' | base64 -d)" \
+  -- mysql -h mysql-dev.czyg048igqyu.ap-southeast-1.rds.amazonaws.com -umdviewer
 kubectl -n apps scale deploy/mdviewer --replicas=1
 ```
 File dump được tạo bằng `--databases mdviewer`, nên nó tự `CREATE DATABASE`/`USE mdviewer`.
@@ -229,6 +233,6 @@ Copy `frontend/.env.example` thành `frontend/.env`, đặt `VITE_API_URL=https:
 
 - **Manifest chưa có trong git.** `~/server-manage/k8s` (apps.yaml, autodeploy.yaml, databases.yaml…) chỉ có trên máy Mac. Nên đưa vào một repo private. `route.sh` chứa token Cloudflare, nên tách token ra trước khi commit.
 - **`kubectl apply -f apps.yaml` sẽ đưa image về `:main`** (bỏ ghim digest), làm pod khởi động lại một lần. Lần chạy autodeploy sau sẽ ghim lại.
-- **Chỉ chạy 1 bản.** Lúc ZBook chết đột ngột, mdviewer gián đoạn vài phút: pod và MySQL dời sang Jerry sau khoảng 30 giây, cộng thời gian Longhorn gắn ổ và MySQL khởi động. Khi cần bảo trì ZBook thì chạy `kubectl drain` trước. Chi tiết trong note "06 - Test failover".
+- **Chỉ chạy 1 bản.** Lúc ZBook chết đột ngột, mdviewer gián đoạn vài phút: pod dời sang Jerry sau khoảng 30 giây, cộng thời gian khởi động. Database nằm trên RDS nên không bị ảnh hưởng. Khi cần bảo trì ZBook thì chạy `kubectl drain` trước. Chi tiết trong note "06 - Test failover".
 - **Token để autodeploy đọc GHCR và báo status** nằm trong Secret `apps/autodeploy-github`. Token hết hạn thì deploy ngừng: job `verify` chờ 25 phút rồi đỏ. Cách tạo lại có trong note "05 - CI/CD".
 - **Pipeline cũ đã gỡ hết**: pm2, `~/apps/mdviewer`, self-hosted runner, tunnel "home". `.env.production.example` giờ chỉ còn là danh sách biến.

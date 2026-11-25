@@ -211,7 +211,7 @@ Production chạy tại **https://mdviewer.baibyte.com**, trên cụm **k3s** 3 
   - Job `verify` xanh nghĩa là bản mới đã thật sự chạy.
   - PR chỉ chạy `check`.
 - **Cấu hình**: Secret `apps/mdviewer-env`, gồm cả `ASSISTANT_API_KEY`. Danh sách biến xem `.env.production.example`.
-- **Database**: MySQL `apps/mysql`, database `mdviewer`, backup lên R2 mỗi 6 giờ. Migration (`backend/src/migrations`) tự chạy khi app khởi động và phải tương thích ngược, vì pod cũ còn phục vụ trong lúc pod mới migrate. Khi đổi entity thì tạo migration mới:
+- **Database**: MySQL trên AWS RDS (`mysql-dev`), database `mdviewer`, backup lên R2 mỗi 6 giờ. Migration (`backend/src/migrations`) tự chạy khi app khởi động và phải tương thích ngược, vì pod cũ còn phục vụ trong lúc pod mới migrate. Khi đổi entity thì tạo migration mới:
   ```bash
   cd backend && DB_NAME=<db trống hoặc khớp schema hiện tại> npm run migration:generate -- src/migrations/<TenMigration>
   ```
