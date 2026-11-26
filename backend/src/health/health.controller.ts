@@ -8,10 +8,10 @@ import { DataSource } from 'typeorm';
 export class HealthController {
   constructor(private readonly db: DataSource) {}
 
-  /** `{ status: "ok" }` when the API and its database answer. */
+  /** `{ status: "ok", version }` when the API and its database answer. */
   @Get()
   async check(): Promise<HealthDto> {
     await this.db.query('SELECT 1');
-    return { status: 'ok' };
+    return { status: 'ok', version: process.env.APP_VERSION || 'dev' };
   }
 }

@@ -206,9 +206,9 @@ Nội dung tối đa khoảng 2 triệu ký tự (body JSON giới hạn 5 MB).
 Production chạy tại **https://mdviewer.baibyte.com**, trên cụm **k3s** 3 máy. API còn có domain riêng **https://apimdviewer.baibyte.com** (cùng một app), dùng khi chạy frontend ở máy với dữ liệu thật.
 
 - **Deploy**: push lên `main` là xong.
-  - GitHub Actions chạy `npm run check`, build image `ghcr.io/thangvd2312/mdviewer:main`.
-  - CronJob `autodeploy` trong cụm (2 phút/lần) kéo image mới về và đổi pod.
-  - Job `verify` xanh nghĩa là bản mới đã thật sự chạy.
+  - GitHub Actions chạy `npm run check`, build image `ghcr.io/thangvd2312/mdviewer:<sha>`, rồi ghi tag đó vào repo `k8s-infra` (`apps/mdviewer`).
+  - ArgoCD trong cụm (hỏi repo đó mỗi 60 giây) thấy commit mới và đổi pod.
+  - Job `verify` xanh nghĩa là `/api/health` đã trả `version` = commit vừa push.
   - PR chỉ chạy `check`.
 - **Cấu hình**: Secret `apps/mdviewer-env`, gồm cả `ASSISTANT_API_KEY`. Danh sách biến xem `.env.production.example`.
 - **Database**: MySQL trên AWS RDS (`mysql-dev`), database `mdviewer`, backup lên R2 mỗi 6 giờ. Migration (`backend/src/migrations`) tự chạy khi app khởi động và phải tương thích ngược, vì pod cũ còn phục vụ trong lúc pod mới migrate. Khi đổi entity thì tạo migration mới:

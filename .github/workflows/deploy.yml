@@ -1,6 +1,6 @@
-# CI cho mọi push/PR (GitHub-hosted). Push lên main → build image → ghcr.io/thangvd2312/mdviewer:main
-# → k3s tự kéo về và triển khai (CronJob autodeploy). Không còn self-hosted runner trên ZBook.
-# Code từ PR/fork không bao giờ được build image hay chạm vào cụm.
+# CI cho mọi push/PR (GitHub-hosted). Push lên main → build image ghcr.io/thangvd2312/mdviewer:<sha>
+# → ghi tag vào repo k8s-infra (apps/mdviewer) → ArgoCD trong cụm k3s thấy commit mới và triển khai (GitOps).
+# Code từ PR/fork không bao giờ được build image hay chạm vào repo k8s-infra.
 name: CI/CD
 
 on:
@@ -11,10 +11,11 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}   # main: xếp hàng, :main chỉ đổi khi lần trước verify xong
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}   # main: xếp hàng, tag mới chỉ ghi khi lần trước verify xong
 
 env:
-  CONTEXTS: k3s/mdviewer
+  APP: mdviewer
+  HEALTH_URL: https://mdviewer.baibyte.com/api/health
 
 jobs:
   check:
@@ -49,7 +50,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # Dockerfile + .dockerignore ở gốc repo. Label revision = commit -> autodeploy trong k3s đọc để báo status về đúng commit.
+      # Dockerfile + .dockerignore ở gốc repo. Cụm chạy tag :<sha>; APP_VERSION = commit, hiện ở /api/health.
       - uses: docker/build-push-action@v6
         with:
           context: .
@@ -65,30 +66,54 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # k3s chỉ vào được qua Tailscale nên GitHub không gọi vào. CronJob "autodeploy" trong cụm (2 phút/lần) tự kéo image mới
-  # rồi gửi commit status "k3s/<deployment>". Job này chờ status đó: run xanh = app mới đã thật sự chạy trên k3s.
-  verify:
+  # GitOps: cụm k3s sau Tailscale, GitHub không gọi vào. Chỉ ghi tag mới vào repo k8s-infra; ArgoCD tự kéo về.
+  deploy:
     needs: image
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      statuses: read
-    env:
-      GH_TOKEN: ${{ github.token }}
+    timeout-minutes: 10
     steps:
-      - name: Chờ k3s triển khai (${{ env.CONTEXTS }})
+      - uses: actions/checkout@v4
+        with:
+          repository: thangvd2312/k8s-infra
+          ssh-key: ${{ secrets.INFRA_DEPLOY_KEY }}
+          path: infra
+      - name: Ghi tag ${{ github.sha }} vào k8s-infra/apps/${{ env.APP }}
+        working-directory: infra
+        env:
+          SHA: ${{ github.sha }}
+          MSG: ${{ github.event.head_commit.message }}
         run: |
-          for i in $(seq 1 150); do
-            done_all=1
-            for c in $CONTEXTS; do
-              st=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/status" --jq ".statuses[] | select(.context==\"$c\") | .state + \"|\" + .description")
-              case "${st%%|*}" in
-                success) ;;
-                failure|error) echo "❌ $c: ${st#*|}"; echo "Xem log: kubectl -n apps logs -l app=autodeploy --tail=100"; exit 1 ;;
-                *) done_all=0 ;;
-              esac
-            done
-            if [ $done_all = 1 ]; then echo "✅ $CONTEXTS đã chạy commit $GITHUB_SHA"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          f=apps/$APP/kustomization.yaml
+          for i in 1 2 3; do
+            git pull -q --rebase origin main
+            sed -i -E "s/^(\s+newTag:).*/\1 $SHA/" "$f"
+            grep -q "newTag: $SHA" "$f" || { echo "❌ Không tìm thấy newTag trong $f"; exit 1; }
+            if git diff --quiet; then echo "Tag đã là $SHA"; exit 0; fi
+            git commit -qam "$APP: ${SHA:0:7} ${MSG%%$'\n'*}"
+            if git push -q origin HEAD:main; then echo "✅ apps/$APP -> $SHA"; exit 0; fi
+            git reset -q --hard HEAD~1   # có người push trước: bỏ commit của mình, kéo bản mới rồi làm lại
+          done
+          echo "❌ Không push được vào k8s-infra sau 3 lần"; exit 1
+
+  # Run xanh = app đã thật sự chạy commit này trên k3s (đọc version từ health).
+  verify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Chờ ${{ env.APP }} chạy ${{ github.sha }} (ArgoCD sync + rollout)
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          for i in $(seq 1 120); do
+            out=$(curl -fsS -m 10 "$HEALTH_URL" || true)
+            v=$(jq -r '.version // empty' <<<"$out" 2>/dev/null || true)
+            if [ "$v" = "$SHA" ]; then echo "✅ $out"; exit 0; fi
+            [ $((i % 6)) = 0 ] && echo "$(date +%T) đang chờ: version=${v:0:7}"
             sleep 10
           done
-          echo "❌ Quá 25 phút chưa thấy k3s triển khai (CronJob autodeploy có chạy không?)"; exit 1
+          echo "❌ Quá 20 phút $APP chưa chạy $SHA. Health cuối: $out"
+          echo "Xem: kubectl -n argocd get app $APP"
+          exit 1

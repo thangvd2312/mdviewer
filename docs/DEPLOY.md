@@ -11,16 +11,16 @@ git push main
    │
    ▼
 GitHub Actions (.github/workflows/deploy.yml)
-   check ──► image ──► verify
-   │          │          └─ chờ commit status "k3s/mdviewer" (k3s báo về)
-   │          └─ build Dockerfile → ghcr.io/thangvd2312/mdviewer:main  (+ :<sha>)
+   check ──► image ──► deploy ──► verify
+   │          │          │          └─ chờ https://mdviewer.baibyte.com/api/health trả version = <sha>
+   │          │          └─ ghi newTag: <sha> vào repo k8s-infra (apps/mdviewer/kustomization.yaml) và commit
+   │          └─ build Dockerfile → ghcr.io/thangvd2312/mdviewer:<sha>  (+ :main)
    └─ npm run install:all && npm run check  (typecheck BE, lint FE, build cả hai)
 
 Cụm k3s, namespace apps
-   CronJob autodeploy (2 phút/lần): thấy digest của :main đổi
-      → kubectl set image deploy/mdviewer *=…:main@sha256:…
-      → chờ pod mới Ready (tối đa 10 phút)
-      → OK: báo status success · lỗi: rollout undo + status failure
+   ArgoCD (hỏi repo k8s-infra mỗi 60 giây): thấy commit mới
+      → sync apps/mdviewer: đổi image Deployment mdviewer sang :<sha>
+      → rolling update: pod mới Ready rồi pod cũ mới tắt
 
 Cloudflare ── tunnel "home-k3s" (cloudflared, 2 bản: ZBook + Jerry)
    mdviewer.baibyte.com     ─┐
@@ -37,8 +37,8 @@ Cloudflare ── tunnel "home-k3s" (cloudflared, 2 bản: ZBook + Jerry)
 | Cấu hình (.env) | `Secret apps/mdviewer-env` |
 | Database | AWS RDS `mysql-dev.czyg048igqyu.ap-southeast-1.rds.amazonaws.com` (MySQL 8.4), database `mdviewer`, user riêng `mdviewer` (chỉ có quyền trên `mdviewer.*`). Từ 2026-11-25; trước đó là `StatefulSet apps/mysql`, đã gỡ |
 | Backup | `CronJob apps/db-backup`, chạy 0h/6h/12h/18h, lưu lên Cloudflare R2 bằng restic |
-| Domain | Tunnel `home-k3s` (remote-managed), sửa bằng `~/server-manage/k8s/route.sh` |
-| Manifest | `~/server-manage/k8s/*.yaml` trên máy Mac (**chưa có trong git**, xem mục 10) |
+| Domain | Tunnel `home-k3s` (remote-managed), sửa bằng `scripts/route.sh` trong repo k8s-infra |
+| Manifest | Repo private [`thangvd2312/k8s-infra`](https://github.com/thangvd2312/k8s-infra), thư mục `apps/mdviewer/`, do ArgoCD đồng bộ (từ 2026-11-26) |
 
 **Cụm có 3 máy, cả 3 đều là control-plane (etcd):**
 
@@ -62,25 +62,21 @@ Chỉ cần **push lên `main`**, không phải làm gì thêm.
 2. `git push origin main`.
 3. Theo dõi:
    ```bash
-   gh run watch                    # cả 3 job; "verify" xanh = bản mới đã thật sự chạy trên k3s
+   gh run watch                    # cả 4 job; "verify" xanh = bản mới đã thật sự chạy trên k3s
    kubectl -n apps get pods -l app=mdviewer -w
-   kubectl -n apps get deploy mdviewer -o jsonpath='{.metadata.annotations.autodeploy\.thangvv/revision}'   # commit đang chạy
+   kubectl -n argocd get app mdviewer                     # Synced/OutOfSync, Healthy/Progressing/Degraded
+   curl -s https://mdviewer.baibyte.com/api/health        # version = commit đang chạy
    ```
 
-Thời gian: build image khoảng 3–10 phút, cộng tối đa 2 phút chờ autodeploy, cộng thời gian pod mới khởi động.
+Thời gian: build image khoảng 3–10 phút, cộng tối đa 1 phút chờ ArgoCD, cộng thời gian pod mới khởi động.
 
 **PR và nhánh khác** chỉ chạy job `check`, không build image và không bao giờ chạm vào cụm.
 
-**Không muốn chờ 2 phút, hoặc muốn tạm dừng deploy tự động:**
+**Tạm dừng deploy tự động** (CI vẫn ghi tag mới vào k8s-infra, nhưng cụm không đổi cho tới khi bật lại):
 ```bash
-kubectl -n apps create job --from=cronjob/autodeploy autodeploy-manual-$(date +%s)   # chạy ngay
-kubectl -n apps patch cronjob autodeploy -p '{"spec":{"suspend":true}}'              # tạm dừng
-kubectl -n apps patch cronjob autodeploy -p '{"spec":{"suspend":false}}'             # bật lại
-
-# log lượt autodeploy gần nhất
-kubectl -n apps logs job/$(kubectl -n apps get job -l app=autodeploy --sort-by=.metadata.creationTimestamp -o name | tail -1 | cut -d/ -f2)
+kubectl -n argocd patch app mdviewer --type merge -p '{"spec":{"syncPolicy":{"automated":null}}}'   # tạm dừng
+kubectl apply -f ~/Desktop/Project/me/k8s-infra/argocd/apps/mdviewer.yaml                          # bật lại
 ```
-Autodeploy phục vụ chung cho kiwi, dautu và mdviewer, nên tạm dừng là dừng cả bốn deployment.
 
 ## 3. Migration database
 
@@ -91,15 +87,15 @@ Vì vậy migration phải **tương thích ngược**, tức code cũ vẫn ch�
 - An toàn: thêm bảng, thêm cột nullable hoặc có default, thêm index.
 - Phải tách làm 2 lần deploy: đổi tên hoặc xoá cột/bảng. Lần đầu deploy code không còn dùng cột đó; lần sau mới xoá cột.
 
-**Không có backup tự động trước khi deploy mdviewer.** Khác với dautu: deployment mdviewer chưa có annotation `autodeploy.thangvv/pre-job`. Trước khi push migration có rủi ro (xoá hoặc sửa dữ liệu), chọn một trong hai cách:
+**Không có backup tự động trước khi deploy mdviewer.** Khác với dautu (có Job PreSync backup DB trước mỗi lần sync). Trước khi push migration có rủi ro (xoá hoặc sửa dữ liệu), chọn một trong hai cách:
 ```bash
 # Cách 1: backup tay rồi mới push
 kubectl -n apps create job --from=cronjob/db-backup db-backup-manual-$(date +%s)
 kubectl -n apps get jobs -w        # chờ COMPLETIONS 1/1
 
 # Cách 2: bật backup trước mọi lần deploy (giống dautu)
-kubectl -n apps annotate deploy/mdviewer autodeploy.thangvv/pre-job=db-backup
-#   và thêm dòng đó vào phần annotations của mdviewer trong ~/server-manage/k8s/apps.yaml
+#   chép apps/dautu/predeploy-rbac.yaml + predeploy-backup.yaml của repo k8s-infra sang apps/mdviewer/,
+#   đổi tên dautu -> mdviewer, thêm 2 file vào kustomization.yaml rồi push
 ```
 
 Pod có tối đa khoảng 60 + 5×20 giây (theo liveness probe) để chạy xong migration và trả `/api/health`. Migration có backfill nặng thì phải tính tới giới hạn này.
@@ -108,25 +104,19 @@ Tạo migration mới vẫn làm như trước, xem mục *Database* trong READM
 
 ## 4. Khi deploy lỗi và rollback
 
-**Tự động:** nếu pod mới không Ready trong 10 phút, autodeploy làm 3 việc:
-- chạy `rollout undo` về bản cũ;
-- ghi digest lỗi vào annotation `autodeploy.thangvv/failed-digest`, để các lượt sau bỏ qua digest đó cho tới khi có image mới;
-- báo status `failure`, nên job `verify` trên GitHub đỏ.
+**Không tự rollback.** Pod mới không Ready thì pod cũ vẫn phục vụ (rolling update), app trên ArgoCD báo `Degraded`, job `verify` trên GitHub đỏ sau 20 phút.
 
-**Tự quay về bản trước:** nên làm qua git để code và cụm luôn khớp nhau:
+**Quay về bản trước ngay, không chờ build:** revert commit đổi tag trong repo k8s-infra. ArgoCD đưa cụm về tag cũ trong khoảng 1 phút.
 ```bash
-git revert <commit> && git push origin main
+cd ~/Desktop/Project/me/k8s-infra && git pull
+git log --oneline -- apps/mdviewer          # mỗi lần deploy là 1 commit "mdviewer: <sha> …"
+git revert <commit lỗi> && git push
 ```
+Sau đó sửa code rồi push mdviewer như bình thường (hoặc `git revert` trong repo mdviewer).
 
-Muốn quay ngay mà không chờ build: undo, rồi **đánh dấu digest hiện tại của `:main` là lỗi**. Nếu bỏ bước đánh dấu, lượt autodeploy 2 phút sau sẽ đưa bản lỗi trở lại.
-```bash
-BAD=$(kubectl -n apps get deploy mdviewer -o jsonpath='{.spec.template.spec.containers[0].image}' | sed 's/.*@//')
-kubectl -n apps rollout undo deploy/mdviewer
-kubectl -n apps annotate deploy/mdviewer --overwrite autodeploy.thangvv/failed-digest="$BAD"
-kubectl -n apps rollout history deploy/mdviewer
-```
+**Không dùng `kubectl rollout undo` hay `kubectl edit`**: ArgoCD (selfHeal) sẽ đưa cụm về đúng như Git ngay sau đó.
 
-`rollout undo` **không** hoàn tác migration. Nếu bản lỗi đã đổi schema, phải viết migration sửa lại, hoặc khôi phục từ backup (mục 7).
+Rollback **không** hoàn tác migration. Nếu bản lỗi đã đổi schema, phải viết migration sửa lại, hoặc khôi phục từ backup (mục 7).
 
 ## 5. Cấu hình (biến môi trường)
 
@@ -158,9 +148,9 @@ kubectl -n apps patch secret mdviewer-env --type json -p '[{"op":"remove","path"
 Giá trị bí mật như API key thì nhập qua `read -s` để không bị lưu vào lịch sử shell:
 `read -s K && kubectl -n apps patch secret mdviewer-env --type merge -p "{\"stringData\":{\"ASSISTANT_API_KEY\":\"$K\"}}"`.
 
-Muốn tạo lại toàn bộ Secret từ một file `.env` (bỏ nháy giống `node --env-file`), dùng `~/server-manage/k8s/env2secret.py`:
+Muốn tạo lại toàn bộ Secret từ một file `.env` (bỏ nháy giống `node --env-file`), dùng `scripts/env2secret.py` trong repo k8s-infra:
 ```bash
-python3 ~/server-manage/k8s/env2secret.py mdviewer-env apps DB_HOST=mysql-dev.czyg048igqyu.ap-southeast-1.rds.amazonaws.com DB_PORT=3306 HOST=0.0.0.0 -PORT \
+python3 ~/Desktop/Project/me/k8s-infra/scripts/env2secret.py mdviewer-env apps DB_HOST=mysql-dev.czyg048igqyu.ap-southeast-1.rds.amazonaws.com DB_PORT=3306 HOST=0.0.0.0 -PORT \
   < mdviewer.env | kubectl apply -f -
 ```
 
@@ -193,13 +183,14 @@ kubectl -n apps run mysql-client --rm -it --restart=Never --image=mysql:8.4 \
 - Chạy tay: `kubectl -n apps create job --from=cronjob/db-backup db-backup-manual-$(date +%s)`.
 - Cách lấy một bản dump ra và khôi phục: xem `~/server-manage/backup/restore-test.sh` và note giai đoạn backup trong project server-manage.
 
-Khôi phục riêng database mdviewer từ file `mdviewer.sql.gz`. **Nên** tạm `scale --replicas=0` app trước để không có ghi mới chen vào:
+Khôi phục riêng database mdviewer từ file `mdviewer.sql.gz`. **Nên** tạm `scale --replicas=0` app trước để không có ghi mới chen vào. Phải tắt auto-sync của ArgoCD trước, nếu không nó sẽ đưa replicas về 1 ngay:
 ```bash
+kubectl -n argocd patch app mdviewer --type merge -p '{"spec":{"syncPolicy":{"automated":null}}}'
 kubectl -n apps scale deploy/mdviewer --replicas=0
 gunzip -c mdviewer.sql.gz | kubectl -n apps run mysql-restore --rm -i --restart=Never --image=mysql:8.4 \
   --env="MYSQL_PWD=$(kubectl -n apps get secret mdviewer-env -o jsonpath='{.data.DB_PASSWORD}' | base64 -d)" \
   -- mysql -h mysql-dev.czyg048igqyu.ap-southeast-1.rds.amazonaws.com -umdviewer
-kubectl -n apps scale deploy/mdviewer --replicas=1
+kubectl apply -f ~/Desktop/Project/me/k8s-infra/argocd/apps/mdviewer.yaml   # bật lại auto-sync -> replicas về 1
 ```
 File dump được tạo bằng `--databases mdviewer`, nên nó tự `CREATE DATABASE`/`USE mdviewer`.
 
@@ -213,7 +204,7 @@ Cả hai domain đều trỏ về cùng một Service:
 | `apimdviewer.baibyte.com` | `http://mdviewer.apps.svc.cluster.local:4100` |
 
 ```bash
-cd ~/server-manage/k8s
+cd ~/Desktop/Project/me/k8s-infra/scripts    # cần file .cf-token (token Cloudflare, không có trong git) cạnh route.sh
 ./route.sh list
 ./route.sh add <hostname> http://mdviewer.apps.svc.cluster.local:4100 --yes   # thêm domain (tự tạo DNS CNAME)
 ```
@@ -231,8 +222,7 @@ Copy `frontend/.env.example` thành `frontend/.env`, đặt `VITE_API_URL=https:
 
 ## 10. Những điểm cần biết
 
-- **Manifest chưa có trong git.** `~/server-manage/k8s` (apps.yaml, autodeploy.yaml, databases.yaml…) chỉ có trên máy Mac. Nên đưa vào một repo private. `route.sh` chứa token Cloudflare, nên tách token ra trước khi commit.
-- **`kubectl apply -f apps.yaml` sẽ đưa image về `:main`** (bỏ ghim digest), làm pod khởi động lại một lần. Lần chạy autodeploy sau sẽ ghim lại.
+- **Manifest nằm trong repo k8s-infra, do ArgoCD quản lý.** Muốn đổi Deployment (RAM, probe, biến `env`…) thì sửa `apps/mdviewer/` trong repo đó rồi push, không `kubectl apply`/`edit` tay.
 - **Chỉ chạy 1 bản.** Lúc ZBook chết đột ngột, mdviewer gián đoạn vài phút: pod dời sang Jerry sau khoảng 30 giây, cộng thời gian khởi động. Database nằm trên RDS nên không bị ảnh hưởng. Khi cần bảo trì ZBook thì chạy `kubectl drain` trước. Chi tiết trong note "06 - Test failover".
-- **Token để autodeploy đọc GHCR và báo status** nằm trong Secret `apps/autodeploy-github`. Token hết hạn thì deploy ngừng: job `verify` chờ 25 phút rồi đỏ. Cách tạo lại có trong note "05 - CI/CD".
+- **CI ghi vào k8s-infra bằng deploy key** (secret `INFRA_DEPLOY_KEY` của repo này, chỉ ghi được đúng repo k8s-infra). Key bị xoá thì job `deploy` đỏ.
 - **Pipeline cũ đã gỡ hết**: pm2, `~/apps/mdviewer`, self-hosted runner, tunnel "home". `.env.production.example` giờ chỉ còn là danh sách biến.
